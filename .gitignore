@@ -1,0 +1,6 @@
+build/
+sw/vitis_ws/
+*.jou
+*.log
+.Xil/
+host/ofdm_bench
