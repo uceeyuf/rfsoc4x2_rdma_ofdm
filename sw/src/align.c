@@ -125,6 +125,6 @@ int align_train(void)
     }
     residual = lag;
     printf("align: %s delay ADC_B path %d, ADC_D path %d steps -> %+.3f samples (%+.1f ps)\r\n",
-           ALIGN_TYPE == XRFDC_ADC_TILE ? "ADC" : "DAC", steps[0], steps[1], lag, lag * 250.0);
+           ALIGN_TYPE == XRFDC_ADC_TILE ? "ADC" : "DAC", steps[0], steps[1], lag, lag * 1e12 / FS_HZ);
     return fabs(lag) < 0.5 ? 0 : -1;
 }

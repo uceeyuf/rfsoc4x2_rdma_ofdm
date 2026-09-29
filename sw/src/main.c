@@ -25,7 +25,7 @@ static int playing;
 
 static void help(void)
 {
-    xil_printf("\r\nkeys: 1 sine 250 MHz | 2 chirp 100 MHz -> 1.5 GHz | p DAC play on/off\r\n"
+    xil_printf("\r\nkeys: 1 sine 250 MHz | 2 chirp 50 -> 750 MHz | p DAC play on/off\r\n"
                "      c capture + measure | m run MTS | r restart tiles (clears MTS)\r\n"
                "      a align by training (after MTS) | d coarse delay sweep\r\n"
                "      o OFDM: next modulation (QPSK / 16 / 64 / 256-QAM), I -> DAC_A, Q -> DAC_B\r\n"
@@ -117,7 +117,7 @@ static void experiment(void)
         align_train();
         aligned[i] = align_residual();
     }
-    xil_printf("\r\nrun | ADC_D vs ADC_B without MTS | with MTS   | MTS + align  (samples, 1 sample = 250 ps)\r\n");
+    printf("\r\nrun | ADC_D vs ADC_B without MTS | with MTS   | MTS + align  (samples, 1 sample = %.0f ps)\r\n", 1e12 / FS_HZ);
     for (int i = 0; i < 5; i++)
         printf(" %d  | %+10.3f                 | %+10.3f | %+10.3f\r\n", i + 1, before[i], after[i], aligned[i]);
 }

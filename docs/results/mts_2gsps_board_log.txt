@@ -1,0 +1,86 @@
+metal: 
+metal: 
+metal: 
+tiles restarted (MTS alignment cleared)
+level:  ADC_D   5333  ADC_C     23  ADC_B   5212  ADC_A     29  (rms, full scale 32767)
+delay ADC_D vs ADC_B:   +3.970 samples =  +1984.9 ps  (inverted polarity)
+MTS DAC tiles 0x5: ok, ADC tiles 0x5: ok
+DAC tile 228 (DAC_B)  state 0xF clock from tile 2 | ADC tile 224 (ADC_C/D)  state 0xF clock from tile 2
+DAC tile 229          state 0xF clock from tile 2 | ADC tile 225            state 0xC clock from tile 2
+DAC tile 230 (DAC_A)  state 0xF PLL locked | ADC tile 226 (ADC_A/B)  state 0xF PLL locked
+DAC tile 231          state 0xF clock from tile 2 | ADC tile 227            state 0xC clock from tile 2
+MTS: DAC latency tile0 104 tile2 104 (offset 0 / 0), ADC latency tile0 104 tile2 104 (offset 0 / 0)
+level:  ADC_D   4935  ADC_C     23  ADC_B   5069  ADC_A     23  (rms, full scale 32767)
+delay ADC_D vs ADC_B:   +0.014 samples =     +7.0 ps  (inverted polarity)
+align: start +0.014 samples
+align: ADC delay ADC_B path 0, ADC_D path 0 steps -> +0.014 samples (+7.1 ps)
+metal: 
+metal: 
+metal: 
+tiles restarted (MTS alignment cleared)
+level:  ADC_D   4941  ADC_C     23  ADC_B   5053  ADC_A     22  (rms, full scale 32767)
+delay ADC_D vs ADC_B:   +8.961 samples =  +4480.3 ps  (inverted polarity)
+MTS DAC tiles 0x5: ok, ADC tiles 0x5: ok
+DAC tile 228 (DAC_B)  state 0xF clock from tile 2 | ADC tile 224 (ADC_C/D)  state 0xF clock from tile 2
+DAC tile 229          state 0xF clock from tile 2 | ADC tile 225            state 0xC clock from tile 2
+DAC tile 230 (DAC_A)  state 0xF PLL locked | ADC tile 226 (ADC_A/B)  state 0xF PLL locked
+DAC tile 231          state 0xF clock from tile 2 | ADC tile 227            state 0xC clock from tile 2
+MTS: DAC latency tile0 104 tile2 104 (offset 0 / 0), ADC latency tile0 104 tile2 104 (offset 0 / 0)
+level:  ADC_D   4944  ADC_C     23  ADC_B   5043  ADC_A     22  (rms, full scale 32767)
+delay ADC_D vs ADC_B:   +0.012 samples =     +6.1 ps  (inverted polarity)
+align: start +0.012 samples
+align: ADC delay ADC_B path 0, ADC_D path 0 steps -> +0.012 samples (+6.1 ps)
+metal: 
+metal: 
+metal: 
+tiles restarted (MTS alignment cleared)
+level:  ADC_D   4958  ADC_C     24  ADC_B   5262  ADC_A     23  (rms, full scale 32767)
+delay ADC_D vs ADC_B:  +23.069 samples = +11534.6 ps  (inverted polarity)
+MTS DAC tiles 0x5: ok, ADC tiles 0x5: ok
+DAC tile 228 (DAC_B)  state 0xF clock from tile 2 | ADC tile 224 (ADC_C/D)  state 0xF clock from tile 2
+DAC tile 229          state 0xF clock from tile 2 | ADC tile 225            state 0xC clock from tile 2
+DAC tile 230 (DAC_A)  state 0xF PLL locked | ADC tile 226 (ADC_A/B)  state 0xF PLL locked
+DAC tile 231          state 0xF clock from tile 2 | ADC tile 227            state 0xC clock from tile 2
+MTS: DAC latency tile0 104 tile2 104 (offset 0 / 0), ADC latency tile0 104 tile2 104 (offset 0 / 0)
+level:  ADC_D   4940  ADC_C     23  ADC_B   5047  ADC_A     23  (rms, full scale 32767)
+delay ADC_D vs ADC_B:   +0.013 samples =     +6.5 ps  (inverted polarity)
+align: start +0.013 samples
+align: ADC delay ADC_B path 0, ADC_D path 0 steps -> +0.013 samples (+6.5 ps)
+metal: 
+metal: 
+metal: 
+tiles restarted (MTS alignment cleared)
+level:  ADC_D   4990  ADC_C     24  ADC_B   5218  ADC_A     26  (rms, full scale 32767)
+delay ADC_D vs ADC_B:   +7.519 samples =  +3759.3 ps  (inverted polarity)
+MTS DAC tiles 0x5: ok, ADC tiles 0x5: ok
+DAC tile 228 (DAC_B)  state 0xF clock from tile 2 | ADC tile 224 (ADC_C/D)  state 0xF clock from tile 2
+DAC tile 229          state 0xF clock from tile 2 | ADC tile 225            state 0xC clock from tile 2
+DAC tile 230 (DAC_A)  state 0xF PLL locked | ADC tile 226 (ADC_A/B)  state 0xF PLL locked
+DAC tile 231          state 0xF clock from tile 2 | ADC tile 227            state 0xC clock from tile 2
+MTS: DAC latency tile0 104 tile2 104 (offset 0 / 0), ADC latency tile0 104 tile2 104 (offset 0 / 0)
+level:  ADC_D   4939  ADC_C     24  ADC_B   5050  ADC_A     23  (rms, full scale 32767)
+delay ADC_D vs ADC_B:   +0.014 samples =     +6.9 ps  (inverted polarity)
+align: start +0.014 samples
+align: ADC delay ADC_B path 0, ADC_D path 0 steps -> +0.014 samples (+6.9 ps)
+metal: 
+metal: 
+metal: 
+tiles restarted (MTS alignment cleared)
+level:  ADC_D   5132  ADC_C     22  ADC_B   5205  ADC_A     27  (rms, full scale 32767)
+delay ADC_D vs ADC_B:  +95.480 samples = +47740.2 ps  (inverted polarity)
+MTS DAC tiles 0x5: ok, ADC tiles 0x5: ok
+DAC tile 228 (DAC_B)  state 0xF clock from tile 2 | ADC tile 224 (ADC_C/D)  state 0xF clock from tile 2
+DAC tile 229          state 0xF clock from tile 2 | ADC tile 225            state 0xC clock from tile 2
+DAC tile 230 (DAC_A)  state 0xF PLL locked | ADC tile 226 (ADC_A/B)  state 0xF PLL locked
+DAC tile 231          state 0xF clock from tile 2 | ADC tile 227            state 0xC clock from tile 2
+MTS: DAC latency tile0 104 tile2 104 (offset 0 / 0), ADC latency tile0 104 tile2 104 (offset 0 / 0)
+level:  ADC_D   4939  ADC_C     22  ADC_B   5067  ADC_A     23  (rms, full scale 32767)
+delay ADC_D vs ADC_B:   +0.013 samples =     +6.5 ps  (inverted polarity)
+align: start +0.013 samples
+align: ADC delay ADC_B path 0, ADC_D path 0 steps -> +0.013 samples (+6.6 ps)
+run | ADC_D vs ADC_B without MTS | with MTS   | MTS + align  (samples, 1 sample = 500 ps)
+ 1  |     +3.970                 |     +0.014 |     +0.014
+ 2  |     +8.961                 |     +0.012 |     +0.012
+ 3  |    +23.069                 |     +0.013 |     +0.013
+ 4  |     +7.519                 |     +0.014 |     +0.014
+ 5  |    +95.480                 |     +0.013 |     +0.013

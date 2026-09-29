@@ -209,7 +209,7 @@ void analyze(double *lag_out)
         int inv;
         double lag = xcorr_lag(buf[ref], buf[c], &inv);
         printf("delay %s vs %s: %+8.3f samples = %+8.1f ps%s\r\n", ch_name[c], ch_name[ref],
-               lag, lag * 250.0, inv ? "  (inverted polarity)" : "");
+               lag, lag * 1e12 / FS_HZ, inv ? "  (inverted polarity)" : "");
         if (lag_out && c == 0 && ref == 2)
             *lag_out = lag;
     }

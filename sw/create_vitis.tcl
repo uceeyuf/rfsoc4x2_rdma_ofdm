@@ -16,6 +16,8 @@ app create -name mts_jtag -platform mts_pf -domain standalone_domain -template "
 importsources -name mts_jtag -path $here/src
 app config -name mts_jtag -add libraries metal
 app config -name mts_jtag -add libraries m
+# 1 MB stack and heap (the template's 8 KB each overflow in the float printf of the reports)
+app config -name mts_jtag -add linker-misc {-Wl,--defsym=_STACK_SIZE=0x100000 -Wl,--defsym=_HEAP_SIZE=0x100000}
 
 # app build generates Debug/makefile; in batch mode it may drop the xsct channel before
 # linking, so finish with make

@@ -15,7 +15,7 @@
 #include "xil_printf.h"
 #include "sleep.h"
 #include "xrfdc.h"
-#include "xrfdc_mts.h"
+/* the MTS API is in xrfdc.h since the RFDC v11 driver (xrfdc_mts.h is gone) */
 #include <metal/log.h>
 #include <metal/sys.h>
 #include "rf_mts.h"
@@ -103,7 +103,7 @@ void rf_status(void)
 
 static int sync_group(u32 type, XRFdc_MultiConverter_Sync_Config *c)
 {
-    XRFdc_MultiConverter_Init(c, 0, 0);
+    XRFdc_MultiConverter_Init(c, 0, 0, MTS_REF_TILE);     /* v11+: reference tile scanned first */
     c->Tiles = MTS_TILES;
     c->RefTile = MTS_REF_TILE;
     c->Target_Latency = -1;
