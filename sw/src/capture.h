@@ -13,7 +13,9 @@
 #define CAP_MEM_BASE    0xA0200000U     /* channel i at CAP_MEM_BASE + i * 0x80000 */
 #define NSAMP           65536
 #define NCH             4
-#define FS_HZ           2.0e9
+#ifndef FS_HZ
+#define FS_HZ           2.0e9           /* the design's sample rate (-DFS_HZ=4.0e9 for build/mts4g) */
+#endif
 
 extern const char *ch_name[NCH];
 

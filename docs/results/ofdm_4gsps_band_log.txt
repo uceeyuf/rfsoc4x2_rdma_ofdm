@@ -1,0 +1,133 @@
+OFDM at 4.0 GSPS (standalone MTS design, build/mts4g, RF fabric 500 MHz), A53 buffer mode, loopback DAC_A -> ADC_B, DAC_B -> ADC_D
+
+==== full band: k = 16 .. 460 (62 MHz .. 1.80 GHz), keys m a f e o e e o e e o e o e L
+MTS DAC tiles 0x5: ok, ADC tiles 0x5: ok
+DAC tile 228 (DAC_B)  state 0xF clock from tile 2 | ADC tile 224 (ADC_C/D)  state 0xF clock from tile 2
+DAC tile 229          state 0xF clock from tile 2 | ADC tile 225            state 0xC clock from tile 2
+DAC tile 230 (DAC_A)  state 0xF PLL locked | ADC tile 226 (ADC_A/B)  state 0xF PLL locked
+DAC tile 231          state 0xF clock from tile 2 | ADC tile 227            state 0xC clock from tile 2
+MTS: DAC latency tile0 112 tile2 112 (offset 0 / 0), ADC latency tile0 96 tile2 96 (offset 0 / 0)
+align: start -0.009 samples
+align: ADC delay ADC_B path 0, ADC_D path 0 steps -> -0.009 samples (-2.3 ps)
+ ADC 3 timed out at state 12 in XRFdc_WaitForRestartClr
+ ADC 1 timed out at state 12 in XRFdc_WaitForRestartClr
+ ADC 3 timed out at state 12 in XRFdc_WaitForRestartClr
+ ADC 1 timed out at state 12 in XRFdc_WaitForRestartClr
+tiles restarted (MTS alignment cleared)
+OFDM TX: 16-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 10.59 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 56 clipped
+OFDM RX 16-QAM: frame at 22383, Q sign -1 lag +12, image rejection -0.4 dB
+  linear EQ        EVM   11.1 dB  bit errors  31692 / 86736
+  widely linear EQ EVM    2.2 dB  bit errors  22207 / 86736
+MTS DAC tiles 0x5: ok, ADC tiles 0x5: ok
+DAC tile 228 (DAC_B)  state 0xF clock from tile 2 | ADC tile 224 (ADC_C/D)  state 0xF clock from tile 2
+DAC tile 229          state 0xF clock from tile 2 | ADC tile 225            state 0xC clock from tile 2
+DAC tile 230 (DAC_A)  state 0xF PLL locked | ADC tile 226 (ADC_A/B)  state 0xF PLL locked
+DAC tile 231          state 0xF clock from tile 2 | ADC tile 227            state 0xC clock from tile 2
+MTS: DAC latency tile0 112 tile2 112 (offset 0 / 0), ADC latency tile0 96 tile2 96 (offset 0 / 0)
+OFDM TX: 16-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 10.59 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 56 clipped
+OFDM RX 16-QAM: frame at 11241, Q sign -1 lag +0, image rejection 28.6 dB
+  linear EQ        EVM  -22.9 dB  bit errors      0 / 86736
+  widely linear EQ EVM  -24.5 dB  bit errors      0 / 86736
+DAC waveform: chirp 100 -> 1500 MHz every 4096 samples, half scale
+align: start -0.006 samples
+align: ADC delay ADC_B path 0, ADC_D path 0 steps -> -0.006 samples (-1.4 ps)
+OFDM TX: 16-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 10.59 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 56 clipped
+OFDM RX 16-QAM: frame at 29769, Q sign -1 lag +0, image rejection 29.2 dB
+  linear EQ        EVM  -23.1 dB  bit errors      0 / 86736
+  widely linear EQ EVM  -24.5 dB  bit errors      0 / 86736
+16-QAM, 10.59 Gb/s | Q lag | image rej. | linear EQ EVM / errors | widely linear EQ EVM / errors
+without MTS  |   +12 |    -0.4 dB |   11.1 dB   31692        |    2.2 dB   22207
+MTS          |    +0 |    28.6 dB |  -22.9 dB       0        |  -24.5 dB       0
+MTS + align  |    +0 |    29.2 dB |  -23.1 dB       0        |  -24.5 dB       0
+(86736 bits per frame)
+OFDM RX 16-QAM: frame at 12873, Q sign -1 lag +0, image rejection 27.2 dB
+  linear EQ        EVM  -22.2 dB  bit errors      0 / 86736
+  widely linear EQ EVM  -24.4 dB  bit errors      0 / 86736
+OFDM TX: 16-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 10.59 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 56 clipped
+OFDM RX 16-QAM: frame at 9769, Q sign -1 lag +0, image rejection 27.0 dB
+  linear EQ        EVM  -22.2 dB  bit errors      0 / 86736
+  widely linear EQ EVM  -24.3 dB  bit errors      0 / 86736
+OFDM RX 16-QAM: frame at 9577, Q sign -1 lag +0, image rejection 27.8 dB
+  linear EQ        EVM  -22.6 dB  bit errors      0 / 86736
+  widely linear EQ EVM  -24.4 dB  bit errors      0 / 86736
+OFDM TX: 64-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 15.88 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 58 clipped
+OFDM RX 64-QAM: frame at 20169, Q sign -1 lag +0, image rejection 30.7 dB
+  linear EQ        EVM  -23.0 dB  bit errors    205 / 130104
+  widely linear EQ EVM  -24.0 dB  bit errors    140 / 130104
+OFDM RX 64-QAM: frame at 10057, Q sign -1 lag +0, image rejection 29.7 dB
+  linear EQ        EVM  -22.7 dB  bit errors    241 / 130104
+  widely linear EQ EVM  -24.0 dB  bit errors    129 / 130104
+OFDM TX: 256-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 21.18 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 64 clipped
+OFDM RX 256-QAM: frame at 2505, Q sign -1 lag +0, image rejection 29.0 dB
+  linear EQ        EVM  -22.4 dB  bit errors   5920 / 173472
+  widely linear EQ EVM  -23.5 dB  bit errors   3899 / 173472
+OFDM TX: 4-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 5.29 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 62 clipped
+OFDM RX 4-QAM: frame at 24361, Q sign -1 lag +0, image rejection 26.1 dB
+  linear EQ        EVM  -21.4 dB  bit errors      0 / 43368
+  widely linear EQ EVM  -23.3 dB  bit errors      0 / 43368
+OFDM TX: 4-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 5.29 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.05 FS per rail, 0 clipped
+OFDM TX: 4-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 5.29 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.10 FS per rail, 0 clipped
+OFDM TX: 4-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 5.29 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.15 FS per rail, 0 clipped
+OFDM TX: 4-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 5.29 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.20 FS per rail, 2 clipped
+OFDM TX: 4-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 5.29 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 62 clipped
+OFDM TX: 4-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 5.29 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.30 FS per rail, 244 clipped
+OFDM TX: 4-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 5.29 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.35 FS per rail, 690 clipped
+OFDM TX: 4-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 5.29 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.40 FS per rail, 1504 clipped
+4-QAM | RMS per rail (FS) | linear EQ EVM / errors | widely linear EQ EVM / errors
+        | 0.05              |  -17.7 dB     105        |  -18.4 dB      61
+        | 0.10              |  -20.0 dB       0        |  -21.1 dB       0
+        | 0.15              |  -20.9 dB       0        |  -22.4 dB       0
+        | 0.20              |  -21.3 dB       0        |  -23.1 dB       0
+        | 0.25              |  -21.6 dB       0        |  -23.4 dB       0
+        | 0.30              |  -21.3 dB       0        |  -23.1 dB       0
+        | 0.35              |  -21.0 dB       0        |  -22.6 dB       0
+        | 0.40              |  -20.4 dB       0        |  -21.6 dB       0
+OFDM TX: 4-QAM, 834 data + 56 pilot sub-carriers, 26 symbols, 5.29 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 62 clipped
+
+==== low half: k = 16 .. 250 (62 .. 977 MHz), keys m a e e o e e o e e (the first two receives, of the boot chirp before any OFDM, left out)
+MTS DAC tiles 0x5: ok, ADC tiles 0x5: ok
+DAC tile 228 (DAC_B)  state 0xF clock from tile 2 | ADC tile 224 (ADC_C/D)  state 0xF clock from tile 2
+DAC tile 229          state 0xF clock from tile 2 | ADC tile 225            state 0xC clock from tile 2
+DAC tile 230 (DAC_A)  state 0xF PLL locked | ADC tile 226 (ADC_A/B)  state 0xF PLL locked
+DAC tile 231          state 0xF clock from tile 2 | ADC tile 227            state 0xC clock from tile 2
+MTS: DAC latency tile0 112 tile2 112 (offset 0 / 0), ADC latency tile0 96 tile2 96 (offset 0 / 0)
+align: start -0.009 samples
+align: ADC delay ADC_B path 0, ADC_D path 0 steps -> -0.009 samples (-2.4 ps)
+OFDM TX: 16-QAM, 440 data + 30 pilot sub-carriers, 26 symbols, 5.59 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 10 clipped
+OFDM RX 16-QAM: frame at 9689, Q sign -1 lag +0, image rejection 28.0 dB
+  linear EQ        EVM  -24.3 dB  bit errors      0 / 45760
+  widely linear EQ EVM  -27.8 dB  bit errors      0 / 45760
+OFDM RX 16-QAM: frame at 3929, Q sign -1 lag +0, image rejection 28.0 dB
+  linear EQ        EVM  -24.3 dB  bit errors      0 / 45760
+  widely linear EQ EVM  -27.8 dB  bit errors      0 / 45760
+OFDM TX: 64-QAM, 440 data + 30 pilot sub-carriers, 26 symbols, 8.38 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 20 clipped
+OFDM RX 64-QAM: frame at 28345, Q sign -1 lag +0, image rejection 28.2 dB
+  linear EQ        EVM  -24.9 dB  bit errors      0 / 68640
+  widely linear EQ EVM  -28.6 dB  bit errors      0 / 68640
+OFDM RX 64-QAM: frame at 16665, Q sign -1 lag +0, image rejection 28.3 dB
+  linear EQ        EVM  -24.9 dB  bit errors      0 / 68640
+  widely linear EQ EVM  -28.6 dB  bit errors      0 / 68640
+
+==== high half: k = 250 .. 460 (977 MHz .. 1.80 GHz), keys m a e e o e e o e e (the first two receives, of the boot chirp before any OFDM, left out)
+MTS DAC tiles 0x5: ok, ADC tiles 0x5: ok
+DAC tile 228 (DAC_B)  state 0xF clock from tile 2 | ADC tile 224 (ADC_C/D)  state 0xF clock from tile 2
+DAC tile 229          state 0xF clock from tile 2 | ADC tile 225            state 0xC clock from tile 2
+DAC tile 230 (DAC_A)  state 0xF PLL locked | ADC tile 226 (ADC_A/B)  state 0xF PLL locked
+DAC tile 231          state 0xF clock from tile 2 | ADC tile 227            state 0xC clock from tile 2
+MTS: DAC latency tile0 112 tile2 112 (offset 0 / 0), ADC latency tile0 96 tile2 96 (offset 0 / 0)
+align: start -0.009 samples
+align: ADC delay ADC_B path 0, ADC_D path 0 steps -> -0.009 samples (-2.2 ps)
+OFDM TX: 16-QAM, 396 data + 26 pilot sub-carriers, 26 symbols, 5.03 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 8 clipped
+OFDM RX 16-QAM: frame at 28225, Q sign -1 lag +0, image rejection 31.1 dB
+  linear EQ        EVM  -27.1 dB  bit errors      0 / 41184
+  widely linear EQ EVM  -29.4 dB  bit errors      0 / 41184
+OFDM RX 16-QAM: frame at 13377, Q sign -1 lag +0, image rejection 30.8 dB
+  linear EQ        EVM  -26.9 dB  bit errors      0 / 41184
+  widely linear EQ EVM  -28.9 dB  bit errors      0 / 41184
+OFDM TX: 64-QAM, 396 data + 26 pilot sub-carriers, 26 symbols, 7.54 Gb/s, I -> DAC_A, Q -> DAC_B, RMS 0.25 FS per rail, 22 clipped
+OFDM RX 64-QAM: frame at 27329, Q sign -1 lag +0, image rejection 31.2 dB
+  linear EQ        EVM  -26.6 dB  bit errors      0 / 61776
+  widely linear EQ EVM  -28.6 dB  bit errors      0 / 61776
+OFDM RX 64-QAM: frame at 10305, Q sign -1 lag +0, image rejection 30.5 dB
+  linear EQ        EVM  -26.3 dB  bit errors      0 / 61776
+  widely linear EQ EVM  -28.4 dB  bit errors      0 / 61776

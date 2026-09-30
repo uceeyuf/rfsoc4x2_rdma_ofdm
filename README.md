@@ -124,6 +124,23 @@ A CPU package that reaches TjMax (105 °C) throttles, and each throttle event is
 
 　
 
+## Headroom: 4 GSPS
+
+Does the loopback carry twice the band? The standalone MTS design also builds at 4.0 GSPS (`MTS_GSPS=4.0`, RF fabric 500 MHz, WNS +0.057 ns), and the A53 then plays and captures OFDM frames with the same N = 1024 over 62 MHz … 1.80 GHz. Buffer mode, 0.25 FS RMS per rail ([log](./docs/results/ofdm_4gsps_band_log.txt)):
+
+| Band at 4 GSPS | Sub-carriers | 16-QAM: EVM, errors | 64-QAM: EVM, errors |
+| :-- | :-: | :-- | :-- |
+| full, 62 MHz … 1.80 GHz | 834 | −24.4 dB, 0 (10.59 Gb/s) | −24.0 dB, 1 × 10⁻³ (15.88 Gb/s) |
+| lower half, 62 … 977 MHz | 440 | −27.8 dB, 0 | −28.6 dB, 0 |
+| upper half, 977 MHz … 1.80 GHz | 396 | −29.4 dB, 0 | −28.6 dB, 0 |
+| 2 GSPS for comparison, 31 … 898 MHz | 834 | −27.4 dB, 0 | −28.0 dB, 5 × 10⁻⁴ |
+
+* The upper half is as clean as the lower one: the baluns and the cable pass 1 … 1.8 GHz without a notable loss.
+* The full band is 3 dB worse, as expected. The total power is fixed by clipping, and each sub-carrier now collects noise over twice the bandwidth.
+* So 4 GSPS doubles the rate at 3 dB less SNR. 16-QAM at 10.6 Gb/s is error-free even in buffer mode, which is about 3 dB worse than the streaming link.
+
+　
+
 ## Spectrum and constellation
 
 Taken from 64 frames of raw ADC samples of a running link (`rf_ofdm --dump`), processed by `host/ofdm_plots` and drawn by `host/plot_ofdm.py`.
@@ -185,7 +202,12 @@ python3 host/plot_ofdm.py build/plot_m4 docs/img/ofdm_16qam.png
   * `host/rf_ofdm --sim 1` loops the TX stream back in memory;
   * `--sim-slip N` shifts it like an RX overflow;
   * `host/ofdm_bench` measures the modem's speed.
-* The standalone MTS design (buffer play / capture, A53 OFDM) is still built by `hw/scripts/make_mts.tcl` and `build_mts.tcl`.
+* The standalone MTS design (buffer play / capture, A53 OFDM) is still built by `hw/scripts/make_mts.tcl` and `build_mts.tcl`. At 4 GSPS:
+  ```sh
+  MTS_GSPS=4.0 vivado -mode batch -source hw/scripts/build_mts.tcl                       # build/mts4g_wrapper.xsa
+  MTS_GSPS=4.0 xsct sw/create_vitis.tcl build/mts4g_wrapper.xsa sw/vitis_mts4g         # OFDM_K_LO / OFDM_K_HI: the band
+  xsct sw/run_jtag.tcl sw/vitis_mts4g && python3 host/uart.py m a f o e
+  ```
 
 　
 
@@ -336,6 +358,21 @@ Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 
 * 剩下的是少数长于 FPGA 512 KB RX 环（65 µs）的停顿，表现为 RX overflow，之后网格可以精确平移。
 
 CPU 封装达到 TjMax（105 °C）时会热降频，每次降频就是一次这样的停顿，所以主机要做好散热，RDMA 引擎线程也不要读 sysfs（MSR）。
+
+## 余量：4 GSPS
+
+环回链路能不能传两倍的带宽？独立 MTS 设计也可以编成 4.0 GSPS（`MTS_GSPS=4.0`，RF fabric 500 MHz，WNS +0.057 ns），A53 用同样的 N = 1024 在 62 MHz … 1.80 GHz 上收发 OFDM 帧。缓冲模式，每路 0.25 FS RMS：
+
+| 4 GSPS 下的频带 | 子载波数 | 16-QAM：EVM、误码 | 64-QAM：EVM、误码 |
+| :-- | :-: | :-- | :-- |
+| 全带，62 MHz … 1.80 GHz | 834 | −24.4 dB，0（10.59 Gb/s） | −24.0 dB，1 × 10⁻³（15.88 Gb/s） |
+| 低半段，62 … 977 MHz | 440 | −27.8 dB，0 | −28.6 dB，0 |
+| 高半段，977 MHz … 1.80 GHz | 396 | −29.4 dB，0 | −28.6 dB，0 |
+| 对照：2 GSPS，31 … 898 MHz | 834 | −27.4 dB，0 | −28.0 dB，5 × 10⁻⁴ |
+
+* 高半段和低半段一样干净：巴伦和线缆在 1 … 1.8 GHz 没有明显损耗。
+* 全带差 3 dB，符合预期：总功率受削顶限制固定，每个子载波收集的噪声带宽翻了一倍。
+* 所以 4 GSPS 用少 3 dB 的 SNR 换来两倍速率。即使在比流式链路差约 3 dB 的缓冲模式下，16-QAM 10.6 Gb/s 也无误码。
 
 ## 频谱与星座图
 

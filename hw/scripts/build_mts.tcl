@@ -2,12 +2,15 @@
 #
 #   vivado -mode batch -source hw/scripts/build_mts.tcl [-tclargs <jobs>]
 #
-# Output: build/mts_wrapper.xsa (with the bitstream), build/timing_summary.rpt, build/utilization.rpt
+# Output: build/mts_wrapper.xsa (with the bitstream), build/mts_timing_summary.rpt, build/mts_utilization.rpt;
+# MTS_GSPS=4.0: 4.0 GSPS (RF fabric 500 MHz), build/mts4g_*
 #
 # Copyright (c) 2026, Yijie Yu. BSD-3-Clause.
 
 set here [file normalize [file dirname [info script]]/../..]
-set xpr  $here/build/mts/mts_jtag.xpr
+set fs_gsps [expr {[info exists ::env(MTS_GSPS)] ? $::env(MTS_GSPS) : 2.0}]
+set tag  [expr {$fs_gsps == 2.0 ? "mts" : "mts[expr {int($fs_gsps)}]g"}]
+set xpr  $here/build/$tag/mts_jtag.xpr
 set jobs [expr {$argc > 0 ? [lindex $argv 0] : 8}]
 set bf [expr {[info exists ::env(RFSOC4X2_BOARD_FILES)] ? $::env(RFSOC4X2_BOARD_FILES) : "$::env(HOME)/fpga/board_files"}]
 set_param board.repoPaths [list $bf]
@@ -30,7 +33,7 @@ if {[get_property PROGRESS [get_runs impl_1]] ne "100%"} {
     error "implementation failed"
 }
 open_run impl_1
-report_timing_summary -file $here/build/timing_summary.rpt
-report_utilization -file $here/build/utilization.rpt
-write_hw_platform -fixed -include_bit -force -file $here/build/mts_wrapper.xsa
-puts "XSA: $here/build/mts_wrapper.xsa"
+report_timing_summary -file $here/build/${tag}_timing_summary.rpt
+report_utilization -file $here/build/${tag}_utilization.rpt
+write_hw_platform -fixed -include_bit -force -file $here/build/${tag}_wrapper.xsa
+puts "XSA: $here/build/${tag}_wrapper.xsa"

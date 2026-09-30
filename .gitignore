@@ -1,6 +1,7 @@
 build/
 sw/vitis_ws/
 sw/vitis_rdma/
+sw/vitis_mts4g/
 *.jou
 *.log
 .Xil/

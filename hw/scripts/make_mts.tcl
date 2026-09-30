@@ -3,6 +3,7 @@
 #
 #   vivado -mode batch -source hw/scripts/make_mts.tcl                 (project + block design)
 #   vivado -mode batch -source hw/scripts/make_mts.tcl -tclargs build  (+ bitstream + .xsa)
+#   MTS_GSPS=4.0 vivado ...    4.0 GSPS, RF fabric 500 MHz (build/mts4g, build/mts4g_wrapper.xsa)
 #
 # 2.0 GSPS. DAC tiles 230 (DAC_A = I) and 228 (DAC_B = Q) play from one URAM; ADC tiles
 # 224 (ADC_D, ADC_C) and 226 (ADC_B, ADC_A) are captured into URAM, 64 k samples each,
@@ -20,7 +21,9 @@
 set build [expr {[llength $argv] > 0 && [lindex $argv 0] eq "build"}]
 
 set here     [file normalize [file dirname [info script]]/../..]
-set proj_dir $here/build/mts
+set fs_gsps  [expr {[info exists ::env(MTS_GSPS)] ? $::env(MTS_GSPS) : 2.0}]
+set tag      [expr {$fs_gsps == 2.0 ? "mts" : "mts[expr {int($fs_gsps)}]g"}]
+set proj_dir $here/build/$tag
 set bd_name  mts
 set bf [expr {[info exists ::env(RFSOC4X2_BOARD_FILES)] ? $::env(RFSOC4X2_BOARD_FILES) : "$::env(HOME)/fpga/board_files"}]
 set_param board.repoPaths [list $bf]
@@ -53,7 +56,7 @@ if {$build} {
         error "implementation failed"
     }
     open_run impl_1
-    report_timing_summary -file $here/build/timing_summary.rpt
-    report_utilization -file $here/build/utilization.rpt
-    write_hw_platform -fixed -include_bit -force -file $here/build/mts_wrapper.xsa
+    report_timing_summary -file $here/build/${tag}_timing_summary.rpt
+    report_utilization -file $here/build/${tag}_utilization.rpt
+    write_hw_platform -fixed -include_bit -force -file $here/build/${tag}_wrapper.xsa
 }

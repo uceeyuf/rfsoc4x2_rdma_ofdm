@@ -1,7 +1,13 @@
-# The MTS block design (PS, RF data converter at 2.0 GSPS, PL_CLK / SYSREF, URAM player and
-# captures), sourced by make_mts.tcl (standalone) and create_project.tcl (with ERNIC).
+# The MTS block design (PS, RF data converter, PL_CLK / SYSREF, URAM player and captures),
+# sourced by make_mts.tcl (standalone) and create_project.tcl (with ERNIC).
 # Expects: $bd_name, $integrate (1: add the DAC source switch, the ADC_B / ADC_D taps and the
-# clk_rf / rstn_rf ports for rf_stream). Copyright (c) 2026, Yijie Yu. BSD-3-Clause.
+# clk_rf / rstn_rf ports for rf_stream); optional $fs_gsps: 2.0 (default, RF fabric 250 MHz) or
+# 4.0 (500 MHz, as rfsoc4x2_mts; standalone only), 8 samples per cycle either way.
+# Copyright (c) 2026, Yijie Yu. BSD-3-Clause.
+
+if {![info exists fs_gsps]} { set fs_gsps 2.0 }
+set f_rf   [format %.3f [expr {$fs_gsps * 125.0}]]     ;# RF fabric, MHz
+set f_half [format %.3f [expr {$fs_gsps * 62.5}]]      ;# player / captures, MHz
 
 create_bd_design $bd_name
 
@@ -24,13 +30,13 @@ set cfg [list CONFIG.Axiclk_Freq {100.0}]
 # all four tiles on: the analog SYSREF is chained through every tile (DAC side, then
 # ADC tile 3 -> 2 -> 1 -> 0), a disabled tile breaks ADC MTS
 foreach t {0 1 2 3} {
-    if {$t == 2} {set pll true; set ref 500.000} else {set pll false; set ref 2000.000}
+    if {$t == 2} {set pll true; set ref 500.000} else {set pll false; set ref [format %.3f [expr {$fs_gsps * 1000.0}]]}
     foreach type {ADC DAC} {
         lappend cfg CONFIG.${type}${t}_Enable {1} \
                     CONFIG.${type}${t}_Multi_Tile_Sync {true} \
-                    CONFIG.${type}${t}_Sampling_Rate {2.0} \
-                    CONFIG.${type}${t}_Fabric_Freq {250.000} \
-                    CONFIG.${type}${t}_Outclk_Freq {125.000} \
+                    CONFIG.${type}${t}_Sampling_Rate $fs_gsps \
+                    CONFIG.${type}${t}_Fabric_Freq $f_rf \
+                    CONFIG.${type}${t}_Outclk_Freq $f_half \
                     CONFIG.${type}${t}_PLL_Enable $pll \
                     CONFIG.${type}${t}_Refclk_Freq $ref
     }
@@ -76,9 +82,9 @@ set_property -dict [list \
     CONFIG.PRIM_IN_FREQ {500.000} \
     CONFIG.PRIMITIVE {MMCM} \
     CONFIG.USE_PHASE_ALIGNMENT {true} \
-    CONFIG.CLKOUT1_REQUESTED_OUT_FREQ {250.000} \
+    CONFIG.CLKOUT1_REQUESTED_OUT_FREQ $f_rf \
     CONFIG.CLKOUT2_USED {true} \
-    CONFIG.CLKOUT2_REQUESTED_OUT_FREQ {125.000} \
+    CONFIG.CLKOUT2_REQUESTED_OUT_FREQ $f_half \
     CONFIG.NUM_OUT_CLKS {2} \
     CONFIG.USE_RESET {true} \
     CONFIG.RESET_TYPE {ACTIVE_HIGH} \
@@ -165,7 +171,7 @@ proc make_uram {name {width 256}} {
     connect_bd_intf_net [get_bd_intf_pins ${name}_ctrl/BRAM_PORTA] [get_bd_intf_pins ${name}_mem/BRAM_PORTA]
 }
 
-# DAC player: URAM (125 MHz, 512 bit) -> 250 MHz, 256 bit = {DAC_B 8 samples, DAC_A 8 samples}.
+# DAC player: URAM (f_half, 512 bit) -> f_rf, 256 bit = {DAC_B 8 samples, DAC_A 8 samples}.
 # I (DAC_A, tile 230) and Q (DAC_B, tile 228) travel in the same beat through one clock
 # converter, so the player adds no skew between them. Memory: blocks of 8 I then 8 Q samples.
 make_uram dac_play 512
@@ -209,7 +215,7 @@ connect_bd_net $clk_rf [get_bd_pins dac_cc/m_axis_aclk] [get_bd_pins dac_dw/aclk
 connect_bd_net $rstn_cap [get_bd_pins dac_streamer/axis_aresetn] [get_bd_pins dac_play_ctrl/s_axi_aresetn] [get_bd_pins dac_cc/s_axis_aresetn]
 connect_bd_net $rstn_rf [get_bd_pins dac_cc/m_axis_aresetn] [get_bd_pins dac_dw/aresetn] [get_bd_pins dac_bcast/aresetn]
 
-# ADC captures: RF stream -> SYSREF-aligned window (250 MHz) -> 256 bit -> 125 MHz -> URAM
+# ADC captures: RF stream -> SYSREF-aligned window (f_rf) -> 256 bit -> f_half -> URAM
 set captures {cap0 m00 cap1 m02 cap2 m20 cap3 m22}
 foreach {c m} $captures {
     create_bd_cell -type module -reference cap_gate ${c}_gate
@@ -249,7 +255,7 @@ foreach {c m} $captures {
     connect_bd_net $rstn_cap [get_bd_pins ${c}_cc/m_axis_aresetn] [get_bd_pins ${c}_writer/axis_aresetn] [get_bd_pins ${c}_ctrl/s_axi_aresetn]
 }
 
-# interconnect masters: M00 rfdc, M01 gpio (100 MHz); M02 DAC URAM, M03..M06 captures (125 MHz)
+# interconnect masters: M00 rfdc, M01 gpio (100 MHz); M02 DAC URAM, M03..M06 captures (f_half)
 set slaves [list \
     M00 usp_rf_data_converter_0/s_axi $clk_ps  $rstn_ps \
     M01 gpio_ctrl/S_AXI               $clk_ps  $rstn_ps \

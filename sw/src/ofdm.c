@@ -2,7 +2,7 @@
  * I/Q OFDM over the two DACs: DAC_A = I, DAC_B = Q (baseband for an external I/Q modulator).
  *
  * 2.0 GSPS, N = 1024, CP = 128 (1.95 MHz sub-carriers), active k = +/-16 .. +/-460
- * (31 .. 898 MHz), pilots on k = +/-16, 32, ... Frame: two training symbols, 26 data
+ * (31 .. 898 MHz; at 4.0 GSPS 62 .. 1797 MHz), pilots on k = +/-16, 32, ... Frame: two training symbols, 26 data
  * symbols, 512 zeros = 32768 samples; the 64 k DAC buffer holds two identical frames, so any
  * 64 k capture contains a whole one.
  *
@@ -29,8 +29,12 @@
 #define N           1024
 #define CP          128
 #define SYM         (N + CP)
+#ifndef K_LO
 #define K_LO        16          /* the board baluns roll off below ~30 MHz */
+#endif
+#ifndef K_HI
 #define K_HI        460
+#endif
 #define PILOT_STEP  16
 #define N_DATA_SYM  26
 #define FRAME       32768

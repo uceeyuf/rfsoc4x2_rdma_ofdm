@@ -25,7 +25,7 @@ static int playing;
 
 static void help(void)
 {
-    xil_printf("\r\nkeys: 1 sine 250 MHz | 2 chirp 50 -> 750 MHz | p DAC play on/off\r\n"
+    xil_printf("\r\nkeys: 1 sine 250 MHz | 2 chirp 0.025 -> 0.375 fs | p DAC play on/off\r\n"
                "      c capture + measure | m run MTS | r restart tiles (clears MTS)\r\n"
                "      a align by training (after MTS) | d coarse delay sweep\r\n"
                "      o OFDM: next modulation (QPSK / 16 / 64 / 256-QAM), I -> DAC_A, Q -> DAC_B\r\n"
@@ -64,7 +64,7 @@ static void ofdm_experiment(void)
         } else if (i == 1) {
             rf_mts();
         } else {
-            wave_chirp(50e6, 750e6);      /* training needs the chirp on both rails */
+            wave_chirp(0.025 * FS_HZ, 0.375 * FS_HZ);      /* training needs the chirp on both rails */
             align_train();
         }
         ofdm_tx(m);
@@ -129,7 +129,7 @@ int main(void)
     if (rf_init())
         xil_printf("RF tiles not ready - LMK PLL1 may still be settling, press 'k'\r\n");
     if (pl_clock_ok()) {
-        wave_chirp(50e6, 750e6);
+        wave_chirp(0.025 * FS_HZ, 0.375 * FS_HZ);
         dac_play(playing = 1);
     }
     help();
@@ -145,7 +145,7 @@ int main(void)
         }
         switch (key) {
         case '1': wave_sine(250e6); break;
-        case '2': wave_chirp(50e6, 750e6); break;
+        case '2': wave_chirp(0.025 * FS_HZ, 0.375 * FS_HZ); break;
         case 'p': dac_play(playing = !playing); xil_printf("DAC play %s\r\n", playing ? "on" : "off"); break;
         case 'c': measure(0); break;
         case 'm': rf_mts(); break;
@@ -179,7 +179,7 @@ int main(void)
             clocks();
             rf_init();
             if (pl_clock_ok()) {
-                wave_chirp(50e6, 750e6);
+                wave_chirp(0.025 * FS_HZ, 0.375 * FS_HZ);
                 dac_play(playing = 1);
             }
             break;
