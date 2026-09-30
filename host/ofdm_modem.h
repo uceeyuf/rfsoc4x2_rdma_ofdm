@@ -30,6 +30,10 @@ typedef struct ofdm_ctx ofdm_ctx;
 ofdm_ctx *ofdm_new(void);
 void      ofdm_free(ofdm_ctx *c);
 int       ofdm_data_carriers(void);
+/* sub-carrier layout by FFT bin (0 .. OFDM_N - 1, bin b = k mod N): type 0 empty, 1 pilot (index 1:
+   the pilot is -1), 2 data (index = position in the payload order); signs of the first training
+   symbol's real and imaginary parts (the second one negates bins above N / 2) */
+void      ofdm_layout(uint8_t *type, uint16_t *index, int8_t *t1_re, int8_t *t1_im);
 double    ofdm_rate_bps(int bits_per_sym, double fs_hz);
 
 /* one frame (OFDM_FRAME samples per rail), RMS per rail as a fraction of full scale;

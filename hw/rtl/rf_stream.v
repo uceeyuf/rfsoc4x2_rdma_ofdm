@@ -9,14 +9,17 @@
 //   BASE + 0x20_0000  RX ring  (RX_CHUNKS x CHUNK_WORDS x 64 B, 512 KB): the ADCs fill it; every full
 //                     chunk rings ERNIC's SQ doorbell, and a pre-filled RDMA WRITE WITH
 //                     IMMEDIATE WQE sends it to the host; its completion frees the chunk
-//   BASE + 0x28_0000  control (host RDMA WRITE): +0x00 [0] TX on, [1] RX on, [2] reset
+//   BASE + 0x28_0000  control (host RDMA WRITE): +0x00 [0] TX on, [1] RX on, [2] reset,
+//                     [3] modulator (the TX ring holds 32 KB payload slots, see ofdm_tx),
+//                     [9:8] bits per sub-carrier / 2 - 1
 //                     (pointers, counters); +0x08 TX write pointer (bytes, cumulative, 64 bit)
-//   BASE + 0x28_0040  status (host RDMA READ, one 64-byte word): +0x00 TX read pointer (bytes),
+//   BASE + 0x28_0040  status (host RDMA READ, one 64-byte word): +0x00 TX read pointer (bytes;
+//                     with the modulator: next payload x 32 KB),
 //                     +0x08 TX underflows (words played as zeros: the read pointer never
 //                     waits, see the TX player), +0x10 RX chunks
 //                     produced, +0x18 RX chunks completed, +0x20 RX overflows (words dropped),
 //                     +0x28 {SQ base, SQ doorbells}, +0x30 {TX_WORDS, CHUNK_WORDS},
-//                     +0x38 magic 'RFSTRM01'
+//                     +0x38 magic 'RFSTRM02'
 //
 // ERNIC keeps its SQ consumer index when the QP is configured again, so the SQ producer index
 // is never reset: a run starts at WQE sq_base (all WQEs of the last run were sent, the host
@@ -132,7 +135,8 @@ localparam [31:0] CTL_OFF = 32'h0028_0000;
 (* ram_style = "block" *) reg [511:0] rx_mem [0:RXW-1];
 
 // ======================================================================== control (clk)
-reg         ctl_tx = 1'b0, ctl_rx = 1'b0, ctl_clr = 1'b0;
+reg         ctl_tx = 1'b0, ctl_rx = 1'b0, ctl_clr = 1'b0, ctl_mod = 1'b0;
+reg  [1:0]  ctl_msel = 2'd1;
 reg  [63:0] tx_wptr_b = 64'd0;                   // host write pointer, bytes
 
 // ---------------------------------------------------------------- port a: write bursts
@@ -183,7 +187,9 @@ always @(posedge clk) begin
                 ctl_tx  <= a_wdata[0];
                 ctl_rx  <= a_wdata[1];
                 ctl_clr <= a_wdata[2];
+                ctl_mod <= a_wdata[3];
             end
+            if (a_wstrb[1]) ctl_msel <= a_wdata[9:8];
             for (i = 0; i < 8; i = i + 1)
                 if (a_wstrb[8 + i]) tx_wptr_b[i*8 +: 8] <= a_wdata[64 + i*8 +: 8];
         end
@@ -197,7 +203,7 @@ always @(posedge clk) begin
         bq <= bq >> 1; bq[bcnt - 1'b1] <= w_id;
     end
     if (rst) begin
-        w_act <= 1'b0; bcnt <= 4'd0; ctl_tx <= 1'b0; ctl_rx <= 1'b0; tx_wptr_b <= 64'd0;
+        w_act <= 1'b0; bcnt <= 4'd0; ctl_tx <= 1'b0; ctl_rx <= 1'b0; ctl_mod <= 1'b0; tx_wptr_b <= 64'd0;
     end
     if (ctl_clr) tx_wptr_b <= 64'd0;
 end
@@ -232,8 +238,8 @@ xpm_cdc_gray #(.WIDTH(32), .DEST_SYNC_FF(3)) cdc_rxwr (
 
 // clk -> RF: values that jump (handshake, re-sent whenever the previous one is through)
 reg  [31:0] tx_wr_w = 32'd0, rx_free_w = 32'd0;  // TX words written by the host, RX words freed
-wire [65:0] hs_src = {ctl_tx, ctl_rx, tx_wr_w, rx_free_w};
-wire [65:0] hs_dst;
+wire [68:0] hs_src = {ctl_msel, ctl_mod, ctl_tx, ctl_rx, tx_wr_w, rx_free_w};
+wire [68:0] hs_dst;
 wire        hs_rcv, hs_ack;
 reg         hs_send = 1'b0;
 always @(posedge clk) begin
@@ -241,25 +247,33 @@ always @(posedge clk) begin
     if (!hs_send && !hs_ack) hs_send <= 1'b1;
     else if (hs_ack) hs_send <= 1'b0;
 end
-xpm_cdc_handshake #(.WIDTH(66), .DEST_EXT_HSK(0), .DEST_SYNC_FF(3), .SRC_SYNC_FF(3)) cdc_hs (
+xpm_cdc_handshake #(.WIDTH(69), .DEST_EXT_HSK(0), .DEST_SYNC_FF(3), .SRC_SYNC_FF(3)) cdc_hs (
     .src_clk(clk), .src_in(hs_src), .src_send(hs_send), .src_rcv(hs_ack),
     .dest_clk(clk_rf), .dest_req(hs_rcv), .dest_ack(1'b0), .dest_out(hs_dst));
 wire clr_rf;
 xpm_cdc_pulse #(.DEST_SYNC_FF(3), .RST_USED(0)) cdc_clr (
     .src_clk(clk), .src_pulse(ctl_clr), .src_rst(1'b0), .dest_clk(clk_rf), .dest_rst(1'b0), .dest_pulse(clr_rf));
 
-reg        tx_on_rf = 1'b0, rx_on_rf = 1'b0;
+reg        tx_on_rf = 1'b0, rx_on_rf = 1'b0, mod_rf = 1'b0;
+reg [1:0]  msel_rf = 2'd1;
 reg [31:0] tx_wr_rf = 32'd0, rx_free_rf = 32'd0;
 always @(posedge clk_rf) begin
     if (hs_rcv) begin
         tx_on_rf <= hs_dst[65]; rx_on_rf <= hs_dst[64];
+        mod_rf <= hs_dst[66]; msel_rf <= hs_dst[68:67];
         tx_wr_rf <= hs_dst[63:32]; rx_free_rf <= hs_dst[31:0];
     end
     if (rst_rf || clr_rf) begin
-        tx_on_rf <= 1'b0; rx_on_rf <= 1'b0; tx_wr_rf <= 32'd0; rx_free_rf <= 32'd0;
+        tx_on_rf <= 1'b0; rx_on_rf <= 1'b0; mod_rf <= 1'b0; tx_wr_rf <= 32'd0; rx_free_rf <= 32'd0;
     end
 end
 assign dac_active = tx_on_rf;
+
+// the modulator's TX ring port and samples (instance below the player)
+wire [TXA-1:0] mod_addr;
+wire [255:0]   mod_dac;
+wire [31:0]    mod_q_words, mod_under;
+wire           mod_on;
 
 // ======================================================================== TX player (clk_rf)
 // one 512-bit word per two RF cycles; read latency 4 (address register, BRAM, two output
@@ -279,14 +293,14 @@ always @(posedge clk_rf) begin
     rv <= {rv[2:0], 1'b0};
     // the read pointer keeps time: a word the host has not written yet plays as zeros and is
     // skipped, so later samples stay on their time grid (the host sees rptr > wptr and moves on)
-    if (!ph && tx_on_rf) begin
+    if (!ph && tx_on_rf && !mod_rf) begin
         tx_rd <= tx_rd + 1'b1;
         if (tx_avail)
             rv[0] <= 1'b1;
         else
             tx_under_rf <= tx_under_rf + 1'b1;
     end
-    tx_ra <= tx_rd[TXA-1:0];
+    tx_ra <= mod_rf ? mod_addr : tx_rd[TXA-1:0];
     tx_q1 <= tx_mem[tx_ra];
     tx_q2 <= tx_q1;
     tx_word <= tx_q2;
@@ -296,11 +310,25 @@ always @(posedge clk_rf) begin
     end else begin
         dac_tdata <= tx_hold[511:256];
     end
+    if (mod_rf) dac_tdata <= mod_dac;
     dac_tvalid <= 1'b1;
     if (rst_rf || clr_rf) begin
         tx_rd <= 32'd0; tx_under_rf <= 32'd0; rv <= 4'b0000;
     end
 end
+
+// ======================================================================== OFDM modulator (clk_rf)
+// control bit 3: the TX ring holds payloads (slot q of 32 KB: payload q, the frame's bits) and the
+// modulator (ofdm_tx) makes the samples; bits 9:8: bits per sub-carrier / 2 - 1
+ofdm_tx #(.TXA(TXA), .SLOT(512), .NSLOT(TX_WORDS / 512), .RD_LAT(4)) modulator (
+    .clk(clk_rf), .rst(rst_rf), .en(tx_on_rf && mod_rf), .msel(msel_rf), .tx_wr(tx_wr_rf),
+    .mem_addr(mod_addr), .mem_data(tx_word), .q_words(mod_q_words), .under(mod_under),
+    .dac(mod_dac), .dac_on(mod_on));
+wire [31:0] mod_q_s, mod_under_s;
+xpm_cdc_gray #(.WIDTH(32), .DEST_SYNC_FF(3)) cdc_modq (
+    .src_clk(clk_rf), .src_in_bin(mod_q_words >> 9), .dest_clk(clk), .dest_out_bin(mod_q_s));
+xpm_cdc_gray #(.WIDTH(32), .DEST_SYNC_FF(3)) cdc_modu (
+    .src_clk(clk_rf), .src_in_bin(mod_under), .dest_clk(clk), .dest_out_bin(mod_under_s));
 
 // ======================================================================== RX packer (clk_rf)
 // ring chunk of the run's first chunk: quasi static (changes on reset, long before RX is on)
@@ -403,14 +431,14 @@ end
 // RX ring (BRAM, latency 2) and the status word; one burst at a time, R one beat per cycle
 reg [511:0] status = 512'd0;
 always @(posedge clk)
-    status <= {64'h5246_5354_524D_3031,                       // 'RFSTRM01'
+    status <= {64'h5246_5354_524D_3032,                       // 'RFSTRM02': with the modulator
                32'd0 + TX_WORDS, 32'd0 + CHUNK_WORDS,
                sq_base, n_sq,
                32'd0, rx_over_s,
                32'd0, chunks_done,
                32'd0, chunks_ready,
-               32'd0, tx_under_s,
-               26'd0, tx_rd_s, 6'd0};
+               32'd0, ctl_mod ? mod_under_s : tx_under_s,
+               ctl_mod ? {17'd0, mod_q_s, 15'd0} : {26'd0, tx_rd_s, 6'd0}};
 
 reg        r_act = 1'b0, r_stat = 1'b0;
 reg [31:0] r_addr = 32'd0;

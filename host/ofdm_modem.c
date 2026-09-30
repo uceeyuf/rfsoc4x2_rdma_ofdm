@@ -192,6 +192,18 @@ ofdm_ctx *ofdm_new(void)
 
 void ofdm_free(ofdm_ctx *c) { free(c); }
 int ofdm_data_carriers(void) { tables(); return n_data; }
+
+void ofdm_layout(uint8_t *type, uint16_t *index, int8_t *t1_re, int8_t *t1_im)
+{
+    tables();
+    for (int b = 0; b < N; b++) {
+        type[b] = 0; index[b] = 0;
+        t1_re[b] = crealf(t1[b]) > 0 ? 1 : crealf(t1[b]) < 0 ? -1 : 0;
+        t1_im[b] = cimagf(t1[b]) > 0 ? 1 : cimagf(t1[b]) < 0 ? -1 : 0;
+    }
+    for (int i = 0; i < n_data; i++) { type[kidx(data_k[i])] = 2; index[kidx(data_k[i])] = (uint16_t)i; }
+    for (int i = 0; i < n_pilot; i++) { type[kidx(pilot_k[i])] = 1; index[kidx(pilot_k[i])] = pilot_value(pilot_k[i]) < 0; }
+}
 double ofdm_rate_bps(int m, double fs) { tables(); return (double)N_DATA_SYM * n_data * m / (FRAME / fs); }
 
 /* payload: xorshift32 words, LSB first */

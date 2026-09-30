@@ -14,6 +14,7 @@
  *   rf_ofdm [--m 4] [--rms 0.18] [--seconds 10] [--tx-threads 3] [--rx-threads 12]
  *           [--video WxH | --yuv FILE --size WxH] [--vframes 30]
  *           [--save FILE --save-frames N --save-every K (every K-th received video frame)]
+ *           [--fpga-tx 1 (the FPGA modulates: the host sends payloads, 32 KB slots)]
  *           [--dump FILE --dump-frames K (raw ADC samples of K frames after the first lock, for
  *            host/ofdm_plots: spectrum and constellation)]
  *           [--dev NAME] [--params FILE] [--sim 1]
@@ -48,12 +49,13 @@
 #define CH_SAMP     (RL_CHUNK / 4)                  /* samples per RX chunk */
 #define NOUT        256                             /* demodulated payloads waiting for the checker */
 #define PIECE       (64u << 10)
+#define SLOT_B      (32u << 10)                     /* --fpga-tx: payload slot in the FPGA ring */
 #define MAGIC       0x4D44464Fu                     /* "OFDM" */
 #define HDR         8                               /* magic, sequence number */
 
 static struct {
     const char *dev, *params, *yuv, *save, *dump;
-    int m, tx_threads, rx_threads, w, h, vframes, save_frames, save_every, dump_frames, sim, sim_free, sim_slip;
+    int m, tx_threads, rx_threads, w, h, vframes, save_frames, save_every, dump_frames, sim, sim_free, sim_slip, fpga_tx;
     double rms, seconds;
 } O = {.params = "stream_params.txt", .m = 4, .tx_threads = 3, .rx_threads = 12, .w = 1280, .h = 720,
        .vframes = 30, .save_every = 1, .dump_frames = 64, .rms = 0.18, .seconds = 10};
@@ -183,9 +185,11 @@ static void *tx_thread(void *arg)
         while (f >= atomic_load_explicit(&tx_done, memory_order_acquire) + NTX)
             if (atomic_load_explicit(&stop, memory_order_relaxed)) goto out; else _mm_pause();
         uint32_t h[2] = {MAGIC, (uint32_t)f};
-        xor_bytes(bits, (const uint8_t *)h, scr, HDR);
-        xor_bytes(bits + HDR, payload_src(f), scr + HDR, PL);
-        ofdm_mod_stream(c, O.m, gain, bits, (int16_t *)(txr + (f % NTX) * FRAME_B));
+        /* --fpga-tx: the scrambled payload goes to the FPGA as it is */
+        uint8_t *dst = O.fpga_tx ? txr + (f % NTX) * SLOT_B : bits;
+        xor_bytes(dst, (const uint8_t *)h, scr, HDR);
+        xor_bytes(dst + HDR, payload_src(f), scr + HDR, PL);
+        if (!O.fpga_tx) ofdm_mod_stream(c, O.m, gain, bits, (int16_t *)(txr + (f % NTX) * FRAME_B));
         atomic_store_explicit(&tx_ready[f % NTX], f + 1, memory_order_release);
     }
 out:
@@ -605,6 +609,7 @@ int main(int argc, char **argv)
         else if (!strcmp(k, "--save-frames")) O.save_frames = atoi(v);
         else if (!strcmp(k, "--save-every")) O.save_every = atoi(v) > 0 ? atoi(v) : 1;
         else if (!strcmp(k, "--dump")) O.dump = v;
+        else if (!strcmp(k, "--fpga-tx")) O.fpga_tx = atoi(v);
         else if (!strcmp(k, "--dump-frames")) O.dump_frames = atoi(v);
         else if (!strcmp(k, "--dev")) O.dev = v;
         else if (!strcmp(k, "--params")) O.params = v;
@@ -656,19 +661,25 @@ int main(int argc, char **argv)
 
     /* reset, prefill the FPGA ring with the first frames, switch on */
     const uint64_t tx_ring = rl_status(&L, sts, c_mr->lkey);
-    printf("FPGA TX ring %lu KB\n", (unsigned long)(tx_ring >> 10));
+    printf("FPGA TX ring %lu KB%s\n", (unsigned long)(tx_ring >> 10), rl_modulator ? ", modulator" : "");
+    if (O.fpga_tx && !rl_modulator) { fprintf(stderr, "--fpga-tx: this bitstream has no modulator\n"); return 1; }
+    /* FPGA ring bytes per write and per frame; the host source of a write and its length */
+    const uint64_t UNIT = O.fpga_tx ? SLOT_B : PIECE, FR_B = O.fpga_tx ? SLOT_B : FRAME_B;
+    const int RBITS = O.fpga_tx ? 47 : 38;
+    #define TX_SRC(wp) ((uintptr_t)txr + (O.fpga_tx ? ((wp) / SLOT_B % NTX) * SLOT_B : (wp) % ((size_t)NTX * FRAME_B)))
+    #define TX_LEN     (O.fpga_tx ? (uint32_t)FB : PIECE)
     ctl[0] = 4; ctl[1] = 0; POST(w_ctl);
     uint64_t wptr = 0;
-    for (; wptr < tx_ring; wptr += PIECE) {
-        uint64_t f = wptr / FRAME_B;
+    for (; wptr < tx_ring; wptr += UNIT) {
+        uint64_t f = wptr / FR_B;
         while (atomic_load_explicit(&tx_ready[f % NTX], memory_order_acquire) != f + 1) _mm_pause();
-        struct ibv_sge sg = {.addr = (uintptr_t)txr + wptr % ((size_t)NTX * FRAME_B), .length = PIECE, .lkey = tx_mr->lkey};
-        struct ibv_send_wr w = {.wr_id = 2 | ((wptr + PIECE) << 8), .sg_list = &sg, .num_sge = 1,
+        struct ibv_sge sg = {.addr = TX_SRC(wptr), .length = TX_LEN, .lkey = tx_mr->lkey};
+        struct ibv_send_wr w = {.wr_id = 2 | ((wptr + UNIT) << 8), .sg_list = &sg, .num_sge = 1,
                                 .opcode = IBV_WR_RDMA_WRITE, .send_flags = IBV_SEND_SIGNALED};
         w.wr.rdma.remote_addr = RL_WIN + wptr % tx_ring; w.wr.rdma.rkey = RL_WIN_RKEY;
         POST(w);
     }
-    ctl[0] = 3; ctl[1] = wptr; POST(w_ctl);
+    ctl[0] = 3 | (O.fpga_tx ? 8 | (uint64_t)(O.m / 2 - 1) << 8 : 0); ctl[1] = wptr; POST(w_ctl);
     t_start = rl_now();
     pthread_create(&chk, NULL, checker, &chk_cpu);
 
@@ -687,24 +698,24 @@ int main(int argc, char **argv)
            passed the write pointer, skip ahead of it; the frames in between are lost, the frame
            grid stays */
         if ((int64_t)(wptr - rptr) < 0) {
-            wptr = (rptr + (256u << 10) + PIECE - 1) & ~(uint64_t)(PIECE - 1);
+            wptr = (rptr + (256u << 10) + UNIT - 1) & ~(uint64_t)(UNIT - 1);
             tx_skip++;
             /* frames before the new one are not needed; the slots of the frames still in flight
                (at most the FPGA ring's, 16 of 2 MB) stay untouched */
-            uint64_t fn = wptr / FRAME_B, keep = tx_ring / FRAME_B + 8;
+            uint64_t fn = wptr / FR_B, keep = tx_ring / FR_B + 8;
             atomic_store_explicit(&tx_need, fn, memory_order_relaxed);
             if (fn + keep > NTX && fn + keep - NTX > atomic_load(&tx_done))
                 atomic_store_explicit(&tx_done, fn + keep - NTX, memory_order_release);
         }
-        if ((int64_t)(wptr + PIECE - rptr) <= (int64_t)tx_ring) {
-            uint64_t f = wptr / FRAME_B;
+        if ((int64_t)(wptr + UNIT - rptr) <= (int64_t)tx_ring) {
+            uint64_t f = wptr / FR_B;
             if (atomic_load_explicit(&tx_ready[f % NTX], memory_order_acquire) == f + 1) {
-                struct ibv_sge sg = {.addr = (uintptr_t)txr + wptr % ((size_t)NTX * FRAME_B), .length = PIECE, .lkey = tx_mr->lkey};
-                struct ibv_send_wr w = {.wr_id = 2 | ((wptr + PIECE) << 8), .sg_list = &sg, .num_sge = 1,
+                struct ibv_sge sg = {.addr = TX_SRC(wptr), .length = TX_LEN, .lkey = tx_mr->lkey};
+                struct ibv_send_wr w = {.wr_id = 2 | ((wptr + UNIT) << 8), .sg_list = &sg, .num_sge = 1,
                                         .opcode = IBV_WR_RDMA_WRITE, .send_flags = IBV_SEND_SIGNALED};
                 w.wr.rdma.remote_addr = RL_WIN + wptr % tx_ring; w.wr.rdma.rkey = RL_WIN_RKEY;
                 POST(w);
-                wptr += PIECE;
+                wptr += UNIT;
                 ctl[1] = wptr; POST(w_ctl);     /* inline: the value is copied now */
             } else
                 tx_stall++;
@@ -717,12 +728,12 @@ int main(int argc, char **argv)
                 exit(1);
             }
             if (wc[i].wr_id == 1) {
-                rptr = rl_rptr64(sts[0], wptr);
+                rptr = rl_rptr64_bits(sts[0], wptr, RBITS);
                 stat_pending = 0;
                 atomic_store_explicit(&rx_over_seen, (uint32_t)sts[4], memory_order_relaxed);
             }
             else if ((wc[i].wr_id & 0xFF) == 2) {
-                uint64_t d = (wc[i].wr_id >> 8) / FRAME_B;
+                uint64_t d = (wc[i].wr_id >> 8) / FR_B;
                 if (d > atomic_load_explicit(&tx_done, memory_order_relaxed))
                     atomic_store_explicit(&tx_done, d, memory_order_release);
             }

@@ -110,7 +110,7 @@ initial begin
   while (!(rvalid && rready)) @(posedge clk);
   $display("status: tx_rptr %0d B, under %0d, chunks ready %0d, done %0d, over %0d, sq %0d, magic %h",
            rdata[63:0], rdata[127:64], rdata[191:128], rdata[255:192], rdata[319:256], rdata[351:320], rdata[511:448]);
-  if (rdata[511:448] !== 64'h5246_5354_524D_3031) fails = fails + 1;
+  if (rdata[511:448] !== 64'h5246_5354_524D_3032) fails = fails + 1;
   // second run: RX off, complete the rest, reset, RX on again
   wr_burst(BASE + CTL, 0, 1, 0, 64 * 64);
   repeat (50) @(posedge clk);
