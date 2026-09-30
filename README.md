@@ -12,6 +12,7 @@ Continuous I/Q streaming between a Linux host and the RF data converters of the 
 * **16-QAM**: 5.29 Gb/s of payload, 720p at 478 frames/s. In 60 s, 58 of 59 seconds were free of bit errors (BER < 10⁻⁸), 99.6 % of the video frames were byte-exact, and the overall BER was 3 × 10⁻⁵.
 * **64-QAM**: 7.94 Gb/s of payload, 1080p at 319 frames/s. The median BER per second was 2 × 10⁻⁷ (the cable's SNR), and 97.4 % of the video frames were byte-exact.
 * **The transmitter also runs in the FPGA** (`ofdm_tx`: 8 × 1024-point IFFT, bit-exact with its C model). The host then sends only payloads (5.3 Gb/s at 16-QAM instead of 64 Gb/s of samples) from one thread. 16-QAM for 30 s: every second free of bit errors, BER 5.9 × 10⁻¹⁰, EVM −30.6 dB, the same as with the CPU modulator.
+* **So does the receiver** (`ofdm_rx`: 8 × 1024-point FFT, widely linear equaliser, pilot phase, bit-exact with its C model). The host computes the channel coefficients once from 4 frames of samples, then only checks payloads. FPGA to FPGA, 16-QAM for 30 s: BER 2.0 × 10⁻¹⁰; 64-QAM 2.3 × 10⁻⁷, 256-QAM 2.1 × 10⁻⁴, the same as with the CPU receiver. Transmitter and receiver fit together with room to spare (BRAM 73 %, DSP 20 %).
 
 It combines [rfsoc4x2_ernic](https://github.com/uceeyuf/rfsoc4x2_ernic) (100G RDMA) with [rfsoc4x2_mts](https://github.com/uceeyuf/rfsoc4x2_mts) (multi-tile sync, I/Q OFDM), both ported to Vivado 2023.2 and the RF side to 2.0 GSPS.
 
@@ -76,6 +77,26 @@ host CPU: checker <- OFDM demodulators (12 threads) <- RX ring (64 MB) <--RDMA W
 
 　
 
+## The FPGA receiver
+
+`hw/rtl/ofdm_rx.v` demodulates 8 samples per 250 MHz cycle with a static channel. Control bit 4 of rf_stream switches it on, also during a run: from the next chunk boundary the RX ring holds one 32 KB payload slot per frame instead of samples, and status word +0x1C gives that chunk.
+
+* **Host-assisted start.** `rf_ofdm --fpga-rx 1` first locks to the frame grid in sample mode as usual. It then:
+  * sums the FFTs of the training symbols of 4 frames and computes the coefficients (`host/ofdm_rxcoef.c`: A / B, the back-off phase ramp removed, a 7-tap smoother, the widely linear 2 × 2 inverse per pair (k, −k), int18 with one exponent);
+  * computes the rotation gain from the known amplitude (not from the pilots: their coherent sum shrinks with the residual phase across the band);
+  * writes the 445 coefficient words (`+0x28_8000`), the gain and the window position in RX time (status +0x24 gives the time of the run's first sample; the time counter never stops, so the grid carries over), and switches.
+* **Lanes.** Data symbols 2 … 27 go in turn to 8 lanes. A lane stores the 1024 samples in 128 cycles and feeds its FFT (xfft v9.1, forward, unscaled); Y = sat18(round(Y27 / 16)) goes into one half of a ping-pong buffer.
+* **Pair engine.** Per pair (k, −k): x = M y with int18 coefficients (>> 16).
+  * The 28 pilot pairs come first. Their sum goes to one shared float32 unit (`ofdm_rx_rot.v`: multiply, add, square root, divide IP, one after another), which returns the unit phase × gain as int18.
+  * Then the 417 data pairs: v = x · rot (>> 14), sliced on the grid of odd integers × 2¹⁰, Gray, m bits into the lane's bit buffers by payload index.
+* **Packer.** The symbols in order, 8 sub-carriers per cycle, into 512-bit words; each frame padded to 512 words, at most one word every other cycle (the ring's clock crossing drains 200 M words/s).
+* **Verification.**
+  * `host/ofdm_rxfx` models every step bit-exactly (AMD's xfft C model, float32 in the RTL's order). On board dumps its decisions match the floating-point receiver: identical at 16 and 64-QAM, 3 × 10⁻⁵ of the bits differ at 256-QAM; EVM −30.6 / −30.5 / −30.3 dB.
+  * `hw/sim/run_ofdm_rx.sh DUMP` simulates the RTL on the dump's samples and compares every payload bit: identical at 16, 64 and 256-QAM.
+* **Resources.** The receiver takes 68.5 BRAM36, 516 DSP and 32 k LUT; no UltraRAM.
+
+　
+
 ## Results
 
 Host: Core Ultra 7 265K (8 P + 12 E cores), Mellanox ConnectX-4 (PCIe 3.0 x16), Ubuntu 24.04, CPUs 4-7 isolated. Board: RFSoC 4x2, SMA loopback DAC_A → ADC_B, DAC_B → ADC_D.
@@ -88,9 +109,11 @@ Host: Core Ultra 7 265K (8 P + 12 E cores), Mellanox ConnectX-4 (PCIe 3.0 x16), 
 | OFDM 256-QAM, 20 s (`--tx-threads 4`) | 10.58 Gb/s, BER 1.8 × 10⁻⁴ in every second (the SNR limit; a payload this size needs FEC), 0 TX underflows, 0 relocks ([log](./docs/results/ofdm_stream_256qam_20s_log.txt)) |
 | OFDM, FPGA transmitter (`--fpga-tx 1`, one host TX thread), 16-QAM 720p, 30 s | 29 / 29 s without errors, BER 5.9 × 10⁻¹⁰ (93 bits in 1.6 × 10¹¹), 14259 of 14338 video frames byte-exact, 0 TX underflows ([log](./docs/results/ofdm_fpga_tx_m4_30s_log.txt)) |
 | OFDM, FPGA transmitter, 64-QAM 1080p / 256-QAM, 20 s | BER 2.3 × 10⁻⁷ / 1.9 × 10⁻⁴, as with the CPU modulator ([64](./docs/results/ofdm_fpga_tx_m6_20s_log.txt), [256](./docs/results/ofdm_fpga_tx_m8_20s_log.txt)) |
+| OFDM, FPGA transmitter and receiver (`--fpga-tx 1 --fpga-rx 1`), 16-QAM 720p, 30 s | 1.83 M frames demodulated in the FPGA, BER 2.0 × 10⁻¹⁰ (32 bits in 1.6 × 10¹¹, at most 7.6 × 10⁻¹⁰ in any second), 14310 of 14338 video frames byte-exact, 0 TX underflows, 0 RX overflows ([log](./docs/results/ofdm_fpga_rx_m4_30s_log.txt)) |
+| OFDM, FPGA transmitter and receiver, 64-QAM 1080p / 256-QAM, 20 s | BER 2.3 × 10⁻⁷ (per-second median 2.1 × 10⁻⁷) / 2.1 × 10⁻⁴, as with the CPU receiver ([64](./docs/results/ofdm_fpga_rx_m6_20s_log.txt), [256](./docs/results/ofdm_fpga_rx_m8_20s_log.txt)) |
 | OFDM from the A53 (buffer mode, MTS) | 16-QAM 5.29 Gb/s 0 errors (EVM −27.4 dB), 64-QAM 7.94 Gb/s BER 4 × 10⁻⁴, 256-QAM 10.59 Gb/s BER 6 × 10⁻³ ([log](./docs/results/ofdm_2gsps_board_log.txt)) |
 | MTS | DAC_B / ADC_D vs DAC_A / ADC_B after sync: +0.012 … +0.014 samples (6 … 7 ps) ([log](./docs/results/mts_2gsps_board_log.txt)) |
-| Timing, resources | all constraints met (WNS +0.005 ns); BRAM 67 %, UltraRAM 85 %, DSP 8 %, LUT 35 % ([report](./docs/results/rdma_ofdm_timing_summary.rpt), [utilisation](./docs/results/rdma_ofdm_utilization.rpt), [by instance](./docs/results/rdma_ofdm_utilization_hierarchical.rpt)) |
+| Timing, resources (with the FPGA transmitter and receiver) | all constraints met (WNS +0.049 ns); BRAM 73 %, UltraRAM 85 %, DSP 20 %, LUT 43 % ([report](./docs/results/rdma_ofdm_timing_summary.rpt), [utilisation](./docs/results/rdma_ofdm_utilization.rpt), [by instance](./docs/results/rdma_ofdm_utilization_hierarchical.rpt)) |
 
 **What the buffers are sized for.** With the CPU busy, the NIC's DMA pauses for up to ~0.3 ms every few seconds, occasionally for several ms. The status READ and the data WRITEs stall together.
 * The 2 MB TX ring bridges these pauses. With 1 MB, every pause was a TX underflow.
@@ -148,6 +171,8 @@ tests/stream_up.sh 0 host/rf_ofdm --m 6 --video 1920x1080 --seconds 60
 tests/stream_up.sh 0 host/rf_ofdm --fpga-tx 1 --tx-threads 1 --seconds 30        # the FPGA modulates
 host/build_txfx.sh && host/ofdm_txfx tables hw/rtl/ofdm_tx_mem                  # transmitter tables
 hw/sim/run_ofdm_tx.sh 4                                                          # RTL vs bit-exact model
+tests/stream_up.sh 0 host/rf_ofdm --fpga-tx 1 --fpga-rx 1 --tx-threads 1 --seconds 30   # both in the FPGA
+hw/sim/run_ofdm_rx.sh build/rx_m4.dump 3                                         # receiver RTL vs model on a dump
 python3 host/make_gif.py build/rx.yuv 1280x720 docs/img/ofdm_720p.gif
 tests/stream_up.sh 0 host/rf_ofdm --m 4 --seconds 4 --dump build/rx_m4.dump     # raw samples of 64 frames
 host/ofdm_plots build/rx_m4.dump build/plot_m4                                  # EVM, spectrum, symbols
@@ -171,7 +196,8 @@ python3 host/plot_ofdm.py build/plot_m4 docs/img/ofdm_16qam.png
 | `hw/rtl/rdma_ofdm_top.v` | top level: CMAC, ERNIC, DDR4, address splits, MTS block design, rf_stream |
 | `hw/rtl/rf_stream.v` | TX / RX rings (RX in UltraRAM), doorbells, status word |
 | `hw/rtl/ofdm_tx.v`, `ofdm_tx_mem/` | OFDM transmitter (8 × IFFT) and its tables |
-| `hw/sim/` | rf_stream and ofdm_tx testbenches |
+| `hw/rtl/ofdm_rx.v`, `ofdm_rx_rot.v` | OFDM receiver (8 × FFT, equaliser, slicer, packer) and its float32 pilot rotation |
+| `hw/sim/` | rf_stream, ofdm_tx and ofdm_rx testbenches |
 | `hw/scripts/mts_bd.tcl` | MTS block design (RFDC, clocks, players, captures; DAC source mux and ADC taps when integrated) |
 | `host/rf_ofdm.c` | continuous OFDM video link |
 | `host/rf_stream_host.c` | streaming test (tone), with READ / WRITE latency statistics (`LAT=1`) |
@@ -179,6 +205,7 @@ python3 host/plot_ofdm.py build/plot_m4 docs/img/ofdm_16qam.png
 | `host/ofdm_modem.c`, `ofdm_bench.c` | OFDM modem and its benchmark |
 | `host/ofdm_plots.c`, `plot_ofdm.py` | spectrum, constellation and EVM from a raw sample dump |
 | `host/ofdm_txfx.c` | bit-exact model of the FPGA transmitter (links AMD's xfft C model) |
+| `host/ofdm_rxfx.c`, `ofdm_rxcoef.c` | bit-exact model of the FPGA receiver; its channel coefficients (also used by `rf_ofdm --fpga-rx`) |
 | `sw/src` | A53 application (clocks, RF tiles, MTS, buffer-mode OFDM) |
 | `tests/stream_config.tcl`, `stream_up.sh`, `host_tune.sh` | ERNIC configuration over JTAG, bring-up, host tuning |
 
@@ -233,6 +260,7 @@ Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 
 * **16-QAM**：净荷 5.29 Gb/s，720p 478 帧/s。60 s 中 58/59 秒无误码（BER < 10⁻⁸），99.6 % 的视频帧逐字节正确，总 BER 3 × 10⁻⁵。
 * **64-QAM**：净荷 7.94 Gb/s，1080p 319 帧/s。每秒 BER 中位数 2 × 10⁻⁷（线缆 SNR 所限），97.4 % 的视频帧逐字节正确。
 * **发射端也可以放在 FPGA 里**（`ofdm_tx`：8 个 1024 点 IFFT，与其 C 模型逐位一致）。此时主机只用一个线程发送净荷（16-QAM 时 5.3 Gb/s，而不是 64 Gb/s 的样本）。16-QAM 连续 30 s 每秒都无误码，BER 5.9 × 10⁻¹⁰，EVM −30.6 dB，与 CPU 调制相同。
+* **接收端也可以放在 FPGA 里**（`ofdm_rx`：8 个 1024 点 FFT、宽线性均衡、导频相位，与其 C 模型逐位一致）。主机只在开始时用 4 帧样本算一次信道系数，之后只校验净荷。FPGA 到 FPGA，16-QAM 30 s BER 2.0 × 10⁻¹⁰；64-QAM 2.3 × 10⁻⁷，256-QAM 2.1 × 10⁻⁴，与 CPU 接收相同。发射和接收同时放下还有余量（BRAM 73 %，DSP 20 %）。
 
 本仓库结合了 [rfsoc4x2_ernic](https://github.com/uceeyuf/rfsoc4x2_ernic)（100G RDMA）与 [rfsoc4x2_mts](https://github.com/uceeyuf/rfsoc4x2_mts)（多 tile 同步、I/Q OFDM），两者移植到 Vivado 2023.2，射频侧提到 2.0 GSPS。
 
@@ -269,6 +297,23 @@ Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 
   * `hw/sim/run_ofdm_tx.sh` 仿真 RTL 并逐样本比较，QPSK / 16 / 64 / 256-QAM 全部相同。
 * **资源**：发射端占 34 个 BRAM36、8 块 UltraRAM、321 个 DSP（每个 IFFT 占 4 个 BRAM36、40 个 DSP）。全设计的 BRAM 主要用于 rf_stream 的样本环（主机调制 / 解调时使用）。
 
+## FPGA 接收端
+
+`hw/rtl/ofdm_rx.v` 按静态信道解调，每个 250 MHz 周期处理 8 个样本。由 rf_stream 控制字 bit 4 打开，运行中也可以切换：从下一个 chunk 边界起，RX 环里放的不再是样本，而是每帧一个 32 KB 的净荷槽；状态字 +0x1C 给出从哪个 chunk 开始。
+* **主机辅助启动**：`rf_ofdm --fpga-rx 1` 先照常在样本模式下锁定帧网格，然后：
+  * 把 4 帧训练符号的 FFT 相加，计算系数（`host/ofdm_rxcoef.c`：A / B、去掉回退相位斜坡、7 点平滑、每对 (k, −k) 的宽线性 2 × 2 求逆，int18 共用一个指数）；
+  * 由已知幅度算出旋转增益（不用导频幅度：导频相干求和会因频带内残余相位而变小）；
+  * 写入 445 个系数字（`+0x28_8000`）、增益和 RX 时间下的窗口位置（状态字 +0x24 给出本次运行第一个样本的时间，时间计数器从不清零，网格可以沿用），然后切换。
+* **lane**：数据符号 2 … 27 轮流交给 8 条 lane。每条 lane 用 128 个周期存下 1024 个样本，送入自己的 FFT（xfft v9.1，正变换，不缩放），Y = sat18(round(Y27 / 16)) 写入乒乓缓存的一半。
+* **成对处理**：每对 (k, −k) 计算 x = M y（int18 系数，>> 16）。
+  * 先处理 28 对导频，求和后交给共用的 float32 单元（`ofdm_rx_rot.v`：乘、加、开方、除 IP 依次使用），得到单位相位 × 增益的 int18；
+  * 再处理 417 对数据：v = x · rot（>> 14），在奇数 × 2¹⁰ 的网格上判决、Gray 映射，m 个 bit 按净荷序号写入该 lane 的 bit 缓存。
+* **打包**：按符号顺序、每周期 8 个子载波拼成 512 位字，每帧补齐到 512 个字，最多隔一拍输出一个字（RX 环的跨时钟 FIFO 每秒排出 2 亿个字）。
+* **验证**：
+  * `host/ofdm_rxfx` 逐步位精确建模（AMD 的 xfft C 模型，float32 按 RTL 的运算顺序）。在板上采集的数据上，判决与浮点接收机一致：16 / 64-QAM 完全相同，256-QAM 有 3 × 10⁻⁵ 的 bit 不同；EVM −30.6 / −30.5 / −30.3 dB。
+  * `hw/sim/run_ofdm_rx.sh DUMP` 用采集的样本仿真 RTL，逐 bit 比较净荷：16 / 64 / 256-QAM 全部相同。
+* **资源**：接收端占 68.5 个 BRAM36、516 个 DSP、3.2 万个 LUT，不用 UltraRAM。
+
 ## 结果
 
 | 测试 | 结果 |
@@ -279,9 +324,11 @@ Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 
 | OFDM 256-QAM，20 s（`--tx-threads 4`） | 10.58 Gb/s，每秒 BER 均为 1.8 × 10⁻⁴（SNR 所限，传视频需要 FEC），0 TX underflow，0 次重锁 |
 | OFDM，FPGA 发射（`--fpga-tx 1`，主机一个发送线程），16-QAM 720p，30 s | 29/29 秒无误码，BER 5.9 × 10⁻¹⁰（1.6 × 10¹¹ bit 中 93 个错），14338 帧中 14259 帧逐字节正确，0 TX underflow |
 | OFDM，FPGA 发射，64-QAM 1080p / 256-QAM，20 s | BER 2.3 × 10⁻⁷ / 1.9 × 10⁻⁴，与 CPU 调制相同 |
+| OFDM，FPGA 发射 + FPGA 接收（`--fpga-tx 1 --fpga-rx 1`），16-QAM 720p，30 s | FPGA 解调 183 万帧，BER 2.0 × 10⁻¹⁰（1.6 × 10¹¹ bit 中 32 个错，任一秒不超过 7.6 × 10⁻¹⁰），14338 帧视频中 14310 帧逐字节正确，0 TX underflow，0 RX overflow |
+| OFDM，FPGA 发射 + 接收，64-QAM 1080p / 256-QAM，20 s | BER 2.3 × 10⁻⁷（每秒中位数 2.1 × 10⁻⁷）/ 2.1 × 10⁻⁴，与 CPU 接收相同 |
 | A53 OFDM（缓冲模式，MTS） | 16-QAM 5.29 Gb/s 0 误码（EVM −27.4 dB），64-QAM 7.94 Gb/s BER 4 × 10⁻⁴，256-QAM 10.59 Gb/s BER 6 × 10⁻³ |
 | MTS | 同步后 DAC_B / ADC_D 相对 DAC_A / ADC_B：+0.012 … +0.014 样本（6 … 7 ps） |
-| 时序、资源 | 全部满足（WNS +0.005 ns）；BRAM 67 %，UltraRAM 85 %，DSP 8 %，LUT 35 % |
+| 时序、资源（含 FPGA 发射和接收） | 全部满足（WNS +0.049 ns）；BRAM 73 %，UltraRAM 85 %，DSP 20 %，LUT 43 % |
 
 **缓冲区大小的依据**：CPU 满载时，网卡 DMA 每隔几秒会停顿最多约 0.3 ms，偶尔达到数 ms，状态读和数据写同时停。
 * 2 MB 的 TX 环能跨过这些停顿；用 1 MB 时每次停顿都会造成 TX underflow。

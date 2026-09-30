@@ -54,8 +54,11 @@ static inline uint64_t rl_rptr64_bits(uint64_t sts0, uint64_t wptr, int bits)
 }
 static inline uint64_t rl_rptr64(uint64_t sts0, uint64_t wptr) { return rl_rptr64_bits(sts0, wptr, 38); }
 
-/* the FPGA has the OFDM modulator (status magic 'RFSTRM02'); set by rl_status */
-extern int rl_modulator;
+#define RL_COEF_ADDR  (RL_WIN + 0x288000)   /* demodulator coefficients: pair p at + 64 p */
+
+/* the FPGA has the OFDM modulator (status magic 'RFSTRM02' or later), the demodulator
+   ('RFSTRM03'); set by rl_status */
+extern int rl_modulator, rl_demodulator;
 
 /* TX / RX off, then wait until the FPGA's RX chunks are all sent and completed (a clean QP for
    the next run) */

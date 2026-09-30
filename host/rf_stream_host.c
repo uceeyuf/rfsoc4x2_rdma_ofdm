@@ -184,7 +184,7 @@ int main(int argc, char **argv)
         if (t - tlast >= 1.0) {
             printf("%4.0f   %9.2f  %9.2f  %10" PRIu64 "  %5" PRIu64 "   %12" PRIu64 "  %11" PRIu64 "   rptr %" PRIu64 " wptr %" PRIu64 "\n", t - t0,
                    (tx_bytes - tx_last) * 8 / (t - tlast) / 1e9, (rx_chunks - rx_last) * (double)CHUNK * 8 / (t - tlast) / 1e9,
-                   rx_chunks, gaps, sts[1], sts[4], sts[0], wptr);
+                   rx_chunks, gaps, sts[1] & 0xFFFFFFFF, sts[4] & 0xFFFFFFFF, sts[0], wptr);
             fflush(stdout);
             if (getenv("LAT")) printf("      max status READ %.0f us, max data WRITE %.0f us, min fill %lu KB\n",
                                       st_max * 1e6, wr_max * 1e6, (unsigned long)(fill_min >> 10));
@@ -203,6 +203,6 @@ int main(int argc, char **argv)
     if (sv) fclose(sv);
     printf("total: TX %.2f GB, RX %" PRIu64 " chunks (%.2f GB), %" PRIu64 " gaps; FPGA: TX underflow %" PRIu64
            ", RX overflow %" PRIu64 ", chunks produced %" PRIu64 ", sent %" PRIu64 "\n",
-           tx_bytes / 1e9, rx_chunks, rx_chunks * (double)CHUNK / 1e9, gaps, sts[1], sts[4], sts[2], sts[3]);
+           tx_bytes / 1e9, rx_chunks, rx_chunks * (double)CHUNK / 1e9, gaps, sts[1] & 0xFFFFFFFF, sts[4] & 0xFFFFFFFF, sts[2] & 0xFFFFFFFF, sts[3] & 0xFFFFFFFF);
     return 0;
 }

@@ -1,6 +1,7 @@
 // Testbench for rf_stream (small rings): TX words through port a -> DAC beats in order,
 // RX ADC counter -> chunks -> SQ doorbells, RX read-back through port b with random rready,
-// completions, the status word, and a second run after a reset (SQ index carried on).
+// completions, the status word, a second run after a reset (SQ index carried on), and the switch
+// to the demodulator during that run (ofdm_rx stand-in).
 //   hw/sim/run.sh
 // Copyright (c) 2026, Yijie Yu. BSD-3-Clause.
 `timescale 1ns/1ps
@@ -119,9 +120,10 @@ initial begin
   @(posedge clk); araddr <= BASE + STAT; arlen <= 0; arvalid <= 1;
   @(posedge clk); while (!arready) @(posedge clk); arvalid <= 0;
   while (!(rvalid && rready)) @(posedge clk);
-  $display("status: tx_rptr %0d B, under %0d, chunks ready %0d, done %0d, over %0d, sq %0d, magic %h",
-           rdata[63:0], rdata[127:64], rdata[191:128], rdata[255:192], rdata[319:256], rdata[351:320], rdata[511:448]);
-  if (rdata[511:448] !== 64'h5246_5354_524D_3032) fails = fails + 1;
+  $display("status: tx_rptr %0d B, under %0d, chunks ready %0d, done %0d, over %0d, RX t0 %0d, sq %0d, magic %h",
+           rdata[63:0], rdata[95:64], rdata[159:128], rdata[223:192], rdata[287:256], rdata[319:288],
+           rdata[351:320], rdata[511:448]);
+  if (rdata[511:448] !== 64'h5246_5354_524D_3033) fails = fails + 1;
   // second run: RX off, complete the rest, reset, RX on again
   wr_burst(BASE + CTL, 0, 1, 0, 64 * 64);
   repeat (50) @(posedge clk);
@@ -141,6 +143,17 @@ initial begin
   rd1(BASE + RX_OFF + ((dut.sq_base + 2) % RXC) * CHW * 64, w2);
   $display("ring chunk %0d word 0: %h, chunk %0d word 0: %h", dut.sq_base % RXC, w0[31:0], (dut.sq_base + 2) % RXC, w2[31:0]);
   if (w2[31:0] !== w0[31:0] + 4 * CHW) fails = fails + 1;
+  // run 2 goes on with the demodulator: its words from the next chunk boundary on
+  @(posedge clk); cq_cnt <= dut.chunks_ready - dut.chunks_done; cq_valid <= 1; @(posedge clk); cq_valid <= 0;
+  repeat (20) @(posedge clk);
+  wr_burst(BASE + CTL, 0, 1, 2 + 16, 0);
+  repeat (100) @(posedge clk);
+  rd1(BASE + STAT, w0);
+  $display("demodulator from chunk %0d (status %0d), ring words %0d", dut.dem_chunk, w0[255:224], dut.rx_wr);
+  rd1(BASE + RX_OFF + ((dut.sq_base + dut.dem_chunk) % RXC) * CHW * 64, w0);
+  rd1(BASE + RX_OFF + ((dut.sq_base + dut.dem_chunk) % RXC) * CHW * 64 + 64, w2);
+  $display("its chunk word 0: %h, word 1: %h", w0[31:0], w2[31:0]);
+  if (w0[255:224] === 32'hFFFF_FFFF || w0[31:0] !== 32'hDE00_0000 || w2[31:0] !== 32'hDE00_0001) fails = fails + 1;
   if (fails) $display("FAIL (%0d checks)", fails); else $display("PASS");
   $finish;
 end

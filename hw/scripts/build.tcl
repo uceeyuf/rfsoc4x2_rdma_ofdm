@@ -8,7 +8,15 @@ set xpr  [file join $here build rdma_ofdm rdma_ofdm.xpr]
 set jobs [expr {$argc > 0 ? [lindex $argv 0] : 8}]
 set bf [expr {[info exists ::env(RFSOC4X2_BOARD_FILES)] ? $::env(RFSOC4X2_BOARD_FILES) : "$::env(HOME)/fpga/board_files"}]
 set_param board.repoPaths [list $bf]
-if {[file exists $xpr]} { open_project $xpr } else { source [file join $here hw scripts create_project.tcl] }
+if {[file exists $xpr]} {
+    open_project $xpr
+    # an older project: RTL files and IP added since
+    foreach f [glob [file join $here hw rtl *.v]] {
+        if {[llength [get_files -quiet $f]] == 0} { add_files -norecurse -fileset sources_1 $f }
+    }
+    if {[llength [get_ips -quiet fp_mul]] == 0} { source [file join $here hw ip fp_ops.tcl] }
+    update_compile_order -fileset sources_1
+} else { source [file join $here hw scripts create_project.tcl] }
 
 # sources changed since the last build: start that run (and the implementation) again
 foreach r [get_runs] { if {[get_property NEEDS_REFRESH $r]} { reset_run $r } }

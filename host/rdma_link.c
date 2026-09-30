@@ -147,7 +147,7 @@ void rl_connect(rlink *l, const char *params, uint64_t rx_va, uint32_t rx_rkey, 
                                      IBV_QP_RNR_RETRY | IBV_QP_MAX_QP_RD_ATOMIC)) rl_die("RTS");
 }
 
-int rl_modulator;
+int rl_modulator, rl_demodulator;
 
 uint32_t rl_status(rlink *l, uint64_t *sts, uint32_t sts_lkey)
 {
@@ -160,11 +160,12 @@ uint32_t rl_status(rlink *l, uint64_t *sts, uint32_t sts_lkey)
     int n;
     while ((n = ibv_poll_cq(l->scq, 1, &wc)) == 0) {}
     if (n < 0 || wc.status != IBV_WC_SUCCESS) { fprintf(stderr, "status read: %s\n", ibv_wc_status_str(wc.status)); exit(1); }
-    if (sts[7] != 0x52465354524D3031ull && sts[7] != 0x52465354524D3032ull) {
+    if (sts[7] < 0x52465354524D3031ull || sts[7] > 0x52465354524D3033ull) {
         fprintf(stderr, "status word: no rf_stream magic (0x%016lx)\n", (unsigned long)sts[7]);
         exit(1);
     }
-    rl_modulator = sts[7] == 0x52465354524D3032ull;
+    rl_modulator = sts[7] >= 0x52465354524D3032ull;
+    rl_demodulator = sts[7] >= 0x52465354524D3033ull;
     uint32_t tx_ring = (uint32_t)(sts[6] >> 32) * 64;
     if (!tx_ring || tx_ring > RL_TX_RING) { fprintf(stderr, "status word: TX ring %u bytes?\n", tx_ring); exit(1); }
     return tx_ring;

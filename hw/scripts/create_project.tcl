@@ -28,7 +28,7 @@ update_compile_order -fileset sources_1
 import_ip [file join $here hw ip ddr4_0 ddr4_0.xci]
 upgrade_ip -quiet [get_ips ddr4_0]
 set_property CONFIG.C0.DDR4_AxiNarrowBurst {true} [get_ips ddr4_0]
-foreach t {cmac_usplus_0 ernic_0 axi_ic_0 jtag_axi vio_0 ifft1024} { source [file join $here hw ip $t.tcl] }
+foreach t {cmac_usplus_0 ernic_0 axi_ic_0 jtag_axi vio_0 ifft1024 fp_ops} { source [file join $here hw ip $t.tcl] }
 
 # RF side: the MTS block design with the ports for rf_stream
 set bd_name mts
