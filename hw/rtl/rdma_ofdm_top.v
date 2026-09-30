@@ -1361,7 +1361,7 @@ assign rq_cidb = 16'd0;
 assign rq_cidb_addr = 32'd0;
 assign rq_cidb_valid = 1'b0;
 
-rf_stream #(.BASE(32'h8000_0000), .TX_WORDS(16384), .CHUNK_WORDS(1024), .RX_CHUNKS(16), .SQ_DEPTH(256), .QP(2)) stream_inst (
+rf_stream #(.BASE(32'h8000_0000), .TX_WORDS(32768), .CHUNK_WORDS(1024), .RX_CHUNKS(8), .SQ_DEPTH(1024), .QP(2)) stream_inst (
     .clk(clk_200), .rst(rst_200), .clk_rf(clk_rf), .rst_rf(!rstn_rf),
     .a_awid(rxd_mem_awid), .a_awaddr(rxd_mem_awaddr), .a_awlen(rxd_mem_awlen), .a_awsize(rxd_mem_awsize),
     .a_awvalid(rxd_mem_awvalid), .a_awready(rxd_mem_awready),

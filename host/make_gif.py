@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # README GIF from rf_ofdm --save output: the video frame sent (left) and the frame as received
 # after DAC -> cable -> ADC and the host demodulator (right), with the counters at that moment.
-#   python3 host/make_gif.py build/rx_720p.yuv 1280x720 docs/img/ofdm_720p.gif
+#   python3 host/make_gif.py build/rx_720p.yuv 1280x720 docs/img/ofdm_720p.gif [16-QAM "5.29 Gb/s"]
 # Copyright (c) 2026, Yijie Yu. BSD-3-Clause.
 import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
 src, size, dst = sys.argv[1], sys.argv[2], sys.argv[3]
+QAM = sys.argv[4] if len(sys.argv) > 4 else "16-QAM"
+RATE = sys.argv[5] if len(sys.argv) > 5 else "5.29 Gb/s"
 W, H = map(int, size.split("x"))
 VF = W * H * 3 // 2
 TW, TH = 400, 225
@@ -37,7 +39,7 @@ for k, m in enumerate(meta):
            font=FONT, fill=OK if intact else BAD)
     im.paste(rgb(sv[v * VF:(v + 1) * VF]), (M, TOP))
     im.paste(rgb(rx[k * VF:(k + 1) * VF]), (2 * M + TW, TOP))
-    d.text((M, TOP + TH + 6), "2 GSPS I/Q OFDM 16-QAM, 5.29 Gb/s: host CPU mod -> 100G RDMA -> DACs -> cable -> "
+    d.text((M, TOP + TH + 6), f"2 GSPS I/Q OFDM {QAM}, {RATE}: host CPU mod -> 100G RDMA -> DACs -> cable -> "
            "ADCs -> RDMA -> CPU demod", font=FONT, fill=DIM)
     d.text((M, TOP + TH + 24), f"t {t:5.1f} s   {nv} video frames ({nvi} byte-exact)   {nf} OFDM frames   "
            f"BER {be / max(nb, 1):.1e}", font=FONT, fill=FG)

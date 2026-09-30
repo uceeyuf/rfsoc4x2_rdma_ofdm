@@ -11,7 +11,7 @@
  *     A checker thread takes the payloads in order, checks sequence numbers and bit errors against
  *     the source, reassembles video frames and can save some of them (raw YUV 4:2:0).
  *
- *   rf_ofdm [--m 4] [--rms 0.18] [--seconds 10] [--tx-threads 3] [--rx-threads 9]
+ *   rf_ofdm [--m 4] [--rms 0.18] [--seconds 10] [--tx-threads 3] [--rx-threads 12]
  *           [--video WxH | --yuv FILE --size WxH] [--vframes 30]
  *           [--save FILE --save-frames N --save-every K (every K-th received video frame)]
  *           [--dev NAME] [--params FILE] [--sim 1]
@@ -42,7 +42,7 @@
 
 #define FRAME_B     (OFDM_FRAME * 4)                /* one OFDM frame in the stream format */
 #define NTX         128                             /* host TX frame ring (16 MB) */
-#define RING_B      ((size_t)RL_SLOTS * RL_CHUNK)   /* host RX ring (16 MB = 128 frames) */
+#define RING_B      ((size_t)RL_SLOTS * RL_CHUNK)   /* host RX ring (64 MB = 512 frames) */
 #define CH_SAMP     (RL_CHUNK / 4)                  /* samples per RX chunk */
 #define NOUT        256                             /* demodulated payloads waiting for the checker */
 #define PIECE       (64u << 10)
@@ -53,7 +53,7 @@ static struct {
     const char *dev, *params, *yuv, *save;
     int m, tx_threads, rx_threads, w, h, vframes, save_frames, save_every, sim, sim_free, sim_slip;
     double rms, seconds;
-} O = {.params = "stream_params.txt", .m = 4, .tx_threads = 3, .rx_threads = 9, .w = 1280, .h = 720,
+} O = {.params = "stream_params.txt", .m = 4, .tx_threads = 3, .rx_threads = 12, .w = 1280, .h = 720,
        .vframes = 30, .save_every = 1, .rms = 0.18, .seconds = 10};
 
 static int FB, PL;                          /* payload bytes per OFDM frame (with header), video bytes */
@@ -176,8 +176,8 @@ static void *tx_thread(void *arg)
         /* the engine skipped ahead (the FPGA played on without data): so do we */
         uint64_t need = atomic_load_explicit(&tx_need, memory_order_relaxed);
         if (f < need) f += (need - f + O.tx_threads - 1) / O.tx_threads * O.tx_threads;
-        /* the producers spin (they are few): sleeping lets the CPU clock down, and a slow
-           producer starves the FPGA */
+        /* the producers spin (they are few): on the board, sleeping producers (even with the
+           "performance" governor) gave steady TX underflows */
         while (f >= atomic_load_explicit(&tx_done, memory_order_acquire) + NTX)
             if (atomic_load_explicit(&stop, memory_order_relaxed)) goto out; else _mm_pause();
         uint32_t h[2] = {MAGIC, (uint32_t)f};
@@ -454,13 +454,44 @@ static void stop_threads(void)
                    ta[i].n ? (ta[i].t_work - ta[i].t_copy) / ta[i].n * 1e6 : 0.0, ta[i].t_wait_data, ta[i].t_wait_out);
 }
 
+/* CPU package temperature (C) and thermal throttle events, -1 when unavailable */
+static long sysfs_long(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    long v = -1;
+    if (f) { if (fscanf(f, "%ld", &v) != 1) v = -1; fclose(f); }
+    return v;
+}
+static const char *pkg_temp_path(void)
+{
+    static char p[128];
+    for (int i = 0; i < 32 && !p[0]; i++) {
+        char t[128], type[32] = "";
+        snprintf(t, sizeof(t), "/sys/class/thermal/thermal_zone%d/type", i);
+        FILE *f = fopen(t, "r");
+        if (!f) continue;
+        if (fscanf(f, "%31s", type) == 1 && !strcmp(type, "x86_pkg_temp"))
+            snprintf(p, sizeof(p), "/sys/class/thermal/thermal_zone%d/temp", i);
+        fclose(f);
+    }
+    return p;
+}
+
 static void print_stats(double t, double dt, double tx_b, double rx_b, uint64_t under, uint64_t over)
 {
     static uint64_t l_fr, l_be, l_bits, l_vf;
     uint64_t fr = st_frames, be = st_bit_err, bits = st_bits, vf = st_vframes, db = bits - l_bits;
-    printf("%3.0f   %9.2f  %9.2f  %8.0f   %-9.2e  %7" PRIu64 "  %4" PRIu64 "  %6" PRIu64 "  %9.1f  %12" PRIu64 "  %11" PRIu64 "\n",
+    /* only with CPU_TEMP set: on the RDMA engine's thread these sysfs reads (MSRs) cost TX
+       underflows */
+    static long thr0 = -2;
+    int want = getenv("CPU_TEMP") != NULL;
+    long temp = want ? sysfs_long(pkg_temp_path()) : -1000;
+    long thr = want ? sysfs_long("/sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_count") : -1;
+    if (thr0 == -2) thr0 = thr;
+    printf("%3.0f   %9.2f  %9.2f  %8.0f   %-9.2e  %7" PRIu64 "  %4" PRIu64 "  %6" PRIu64 "  %9.1f  %12" PRIu64 "  %11" PRIu64 "  %3ld C %5ld\n",
            t, tx_b * 8 / dt / 1e9, rx_b * 8 / dt / 1e9, (fr - l_fr) / dt, db ? (double)(be - l_be) / db : 0.0,
-           (uint64_t)st_bad_hdr, (uint64_t)st_late, (uint64_t)st_relock, (vf - l_vf) / dt, under, over);
+           (uint64_t)st_bad_hdr, (uint64_t)st_late, (uint64_t)st_relock, (vf - l_vf) / dt, under, over,
+           temp / 1000, thr >= 0 ? thr - thr0 : -1);
     fflush(stdout);
     l_fr = fr; l_be = be; l_bits = bits; l_vf = vf;
 }
@@ -611,7 +642,7 @@ int main(int argc, char **argv)
     int stat_pending = 0;
     double t0 = rl_now(), tlast = t0;
     uint64_t l_tx = 0, l_rx = 0;
-    printf("  t   TX Gbit/s  RX Gbit/s  frames/s   BER        bad hdr  late  relock  video fps  TX underflow  RX overflow\n");
+    printf("  t   TX Gbit/s  RX Gbit/s  frames/s   BER        bad hdr  late  relock  video fps  TX underflow  RX overflow  CPU  throttle\n");
     double gap_max = 0, t_loop = rl_now();
     while (rl_now() - t0 < O.seconds) {
         double tl = rl_now();
@@ -624,12 +655,12 @@ int main(int argc, char **argv)
         if ((int64_t)(wptr - rptr) < 0) {
             wptr = (rptr + (256u << 10) + PIECE - 1) & ~(uint64_t)(PIECE - 1);
             tx_skip++;
-            /* frames before the new one are not needed; the slots of the at most 8 frames still
-               in flight (1 MB FPGA ring) stay untouched: the producers get NTX - 16 frames */
-            uint64_t fn = wptr / FRAME_B;
+            /* frames before the new one are not needed; the slots of the frames still in flight
+               (at most the FPGA ring's, 16 of 2 MB) stay untouched */
+            uint64_t fn = wptr / FRAME_B, keep = tx_ring / FRAME_B + 8;
             atomic_store_explicit(&tx_need, fn, memory_order_relaxed);
-            if (fn + 16 > NTX && fn + 16 - NTX > atomic_load(&tx_done))
-                atomic_store_explicit(&tx_done, fn + 16 - NTX, memory_order_release);
+            if (fn + keep > NTX && fn + keep - NTX > atomic_load(&tx_done))
+                atomic_store_explicit(&tx_done, fn + keep - NTX, memory_order_release);
         }
         if ((int64_t)(wptr + PIECE - rptr) <= (int64_t)tx_ring) {
             uint64_t f = wptr / FRAME_B;

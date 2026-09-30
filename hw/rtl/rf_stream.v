@@ -4,14 +4,14 @@
 // Continuous I/Q streaming between the host (over ERNIC RDMA) and the RF data converters.
 // Sits in ERNIC's on-chip window (behind axi_split2, ERNIC address BASE = 0x8000_0000):
 //
-//   BASE + 0x00_0000  TX ring  (TX_WORDS x 64 B, 1 MB): the host RDMA WRITEs samples, the
-//                     player sends them to the DACs, 2 memory words per 2 RF cycles
-//   BASE + 0x10_0000  RX ring  (RX_CHUNKS x CHUNK_WORDS x 64 B, 1 MB): the ADCs fill it; every full
+//   BASE + 0x00_0000  TX ring  (TX_WORDS x 64 B, 2 MB = 262 us): the host RDMA WRITEs samples,
+//                     the player sends them to the DACs, 2 memory words per 2 RF cycles
+//   BASE + 0x20_0000  RX ring  (RX_CHUNKS x CHUNK_WORDS x 64 B, 512 KB): the ADCs fill it; every full
 //                     chunk rings ERNIC's SQ doorbell, and a pre-filled RDMA WRITE WITH
 //                     IMMEDIATE WQE sends it to the host; its completion frees the chunk
-//   BASE + 0x20_0000  control (host RDMA WRITE): +0x00 [0] TX on, [1] RX on, [2] reset
+//   BASE + 0x28_0000  control (host RDMA WRITE): +0x00 [0] TX on, [1] RX on, [2] reset
 //                     (pointers, counters); +0x08 TX write pointer (bytes, cumulative, 64 bit)
-//   BASE + 0x20_0040  status (host RDMA READ, one 64-byte word): +0x00 TX read pointer (bytes),
+//   BASE + 0x28_0040  status (host RDMA READ, one 64-byte word): +0x00 TX read pointer (bytes),
 //                     +0x08 TX underflows (words played as zeros: the read pointer never
 //                     waits, see the TX player), +0x10 RX chunks
 //                     produced, +0x18 RX chunks completed, +0x20 RX overflows (words dropped),
@@ -36,9 +36,9 @@
 
 module rf_stream #(
     parameter [31:0] BASE        = 32'h8000_0000,
-    parameter        TX_WORDS    = 16384,           // 1 MB
+    parameter        TX_WORDS    = 32768,           // 2 MB
     parameter        CHUNK_WORDS = 1024,            // 64 KB
-    parameter        RX_CHUNKS   = 16,              // 1 MB
+    parameter        RX_CHUNKS   = 8,               // 512 KB
     parameter        SQ_DEPTH    = 256,             // WQEs pre-filled, power of two
     parameter        QP          = 2,
     parameter [31:0] SQPI_ADDR   = 32'h5018_0038 + QP * 32'h100,
@@ -125,7 +125,7 @@ localparam RXA   = $clog2(RXW);
 localparam CHB   = $clog2(CHUNK_WORDS);
 localparam SQB   = $clog2(SQ_DEPTH);
 localparam RCB   = $clog2(RX_CHUNKS);
-localparam [31:0] CTL_OFF = 32'h0020_0000;
+localparam [31:0] CTL_OFF = 32'h0028_0000;
 
 // ======================================================================== memories
 (* ram_style = "block" *) reg [511:0] tx_mem [0:TX_WORDS-1];
@@ -154,11 +154,20 @@ assign a_bid     = bq[0];
 assign a_bresp   = 2'b00;
 assign a_bvalid  = bcnt != 4'd0;
 
+// one register stage in front of the 2 MB of BRAM
 integer i;
+(* shreg_extract = "no" *) reg         tw_e = 1'b0;
+(* shreg_extract = "no" *) reg [TXA-1:0] tw_a = 0;
+(* shreg_extract = "no" *) reg [511:0] tw_d = 512'd0;
+(* shreg_extract = "no" *) reg [63:0]  tw_s = 64'd0;
 always @(posedge clk) begin
-    if (w_beat && w_off < TX_WORDS * 64)
+    tw_e <= w_beat && w_off < TX_WORDS * 64;
+    tw_a <= w_off[TXA+5:6];
+    tw_d <= a_wdata;
+    tw_s <= a_wstrb;
+    if (tw_e)
         for (i = 0; i < 64; i = i + 1)
-            if (a_wstrb[i]) tx_mem[w_off[TXA+5:6]][i*8 +: 8] <= a_wdata[i*8 +: 8];
+            if (tw_s[i]) tx_mem[tw_a][i*8 +: 8] <= tw_d[i*8 +: 8];
 end
 
 always @(posedge clk) begin
@@ -253,19 +262,21 @@ end
 assign dac_active = tx_on_rf;
 
 // ======================================================================== TX player (clk_rf)
-// one 512-bit word per two RF cycles; BRAM read latency 2
+// one 512-bit word per two RF cycles; read latency 4 (address register, BRAM, two output
+// registers) for the 2 MB of BRAM
 reg [31:0] tx_rd = 32'd0;
 reg        ph = 1'b0;                            // 0: low half this cycle, fetch next word
-reg [1:0]  rv = 2'b00;                           // read valid pipeline
-reg [511:0] tx_q1 = 512'd0, tx_word = 512'd0, tx_hold = 512'd0;
+reg [3:0]  rv = 4'b0000;                         // read valid pipeline
+(* shreg_extract = "no" *) reg [TXA-1:0] tx_ra = 0;
+reg [511:0] tx_q1 = 512'd0, tx_q2 = 512'd0, tx_word = 512'd0, tx_hold = 512'd0;
 reg [31:0] tx_under_rf = 32'd0;
 assign tx_rd_rf = tx_rd;
 wire tx_avail = (tx_wr_rf - tx_rd) != 32'd0 && (tx_wr_rf - tx_rd) <= TX_WORDS;
 
 always @(posedge clk_rf) begin
     ph <= ~ph;
-    // fetch on ph == 0, the word is there two cycles later (next ph == 0)
-    rv <= {rv[0], 1'b0};
+    // fetch on ph == 0, the word is there four cycles later (the ph == 0 after next)
+    rv <= {rv[2:0], 1'b0};
     // the read pointer keeps time: a word the host has not written yet plays as zeros and is
     // skipped, so later samples stay on their time grid (the host sees rptr > wptr and moves on)
     if (!ph && tx_on_rf) begin
@@ -275,17 +286,19 @@ always @(posedge clk_rf) begin
         else
             tx_under_rf <= tx_under_rf + 1'b1;
     end
-    tx_q1 <= tx_mem[tx_rd[TXA-1:0]];
-    tx_word <= tx_q1;
+    tx_ra <= tx_rd[TXA-1:0];
+    tx_q1 <= tx_mem[tx_ra];
+    tx_q2 <= tx_q1;
+    tx_word <= tx_q2;
     if (!ph) begin
-        tx_hold <= rv[1] ? tx_word : 512'd0;
-        dac_tdata <= rv[1] ? tx_word[255:0] : 256'd0;
+        tx_hold <= rv[3] ? tx_word : 512'd0;
+        dac_tdata <= rv[3] ? tx_word[255:0] : 256'd0;
     end else begin
         dac_tdata <= tx_hold[511:256];
     end
     dac_tvalid <= 1'b1;
     if (rst_rf || clr_rf) begin
-        tx_rd <= 32'd0; tx_under_rf <= 32'd0; rv <= 2'b00;
+        tx_rd <= 32'd0; tx_under_rf <= 32'd0; rv <= 4'b0000;
     end
 end
 

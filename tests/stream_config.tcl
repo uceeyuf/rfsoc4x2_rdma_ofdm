@@ -9,12 +9,12 @@
 # the RF tiles and MTS: sw/run_jtag.tcl, then key m).
 #
 # Memory:
-#   ERNIC 0x8000_0000  rf_stream window = memory region 0 (VA = PA, R_Key 0x12): TX ring 1 MB,
-#                      RX ring 1 MB (16 chunks) at +0x10_0000, control / status at +0x20_0000
+#   ERNIC 0x8000_0000  rf_stream window = memory region 0 (VA = PA, R_Key 0x12): TX ring 2 MB,
+#                      RX ring 512 KB (8 chunks) at +0x20_0000, control / status at +0x28_0000
 #                      (RX_CHUNKS below must match rf_stream's parameter)
 #   DDR4  0x0010_0000  error buffer     0x0014_0000 response errors    0x0050_0000 data buffers
 #         0x0020_0000  doorbells        0x0030_0000 QP1 RQ / SQ / CQ
-#         0x0040_0000  QP2 RQ (unused)  0x0048_0000 QP2 SQ: 256 WQEs    0x0049_0000 QP2 CQ
+#         0x0040_0000  QP2 RQ (unused)  0x0048_0000 QP2 SQ: 1024 WQEs   0x004A_0000 QP2 CQ
 #
 # QP2 sends: WQE k is an RDMA WRITE WITH IMMEDIATE of RX chunk k mod RX_CHUNKS (64 KB) to host ring slot
 # k (host VA + k x 64 KB), immediate data k. rf_stream rings the SQ doorbell over the handshake
@@ -30,14 +30,14 @@ set FPGA_MAC  0x020000000001
 set FPGA_IP   0xC0A86401              ;# 192.168.100.1
 set HOST_IP   0xC0A86402              ;# 192.168.100.2
 set WIN       0x80000000              ;# rf_stream window
-set WIN_LEN   0x210000
+set WIN_LEN   0x290000
 set MR_KEY    0x12
 set UDP_SPORT 0xC000
 set NUM_QP    8
-set SQ_DEPTH  256
+set SQ_DEPTH  1024                  ;# = rf_stream SQ_DEPTH = host RL_SLOTS
 set CHUNK     0x10000
-set RX_CHUNKS 16
-set RX_RING   [expr {$WIN + 0x100000}]
+set RX_CHUNKS 8
+set RX_RING   [expr {$WIN + 0x200000}]
 set SQ_BASE   0x00480000
 
 open_hw_manager
@@ -129,7 +129,8 @@ puts [format "host: QPN %d  MAC %012x  PSN 0x%x  RX ring VA 0x%x R_Key 0x%x" \
 zero $MEM 0x00200000 64
 zero $MEM 0x00202000 64
 zero $MEM 0x00100000 128
-foreach b {0x00310000 0x00320000 0x00490000} { zero $MEM $b 1024 }
+foreach b {0x00310000 0x00320000} { zero $MEM $b 1024 }
+zero $MEM 0x004A0000 [expr {$SQ_DEPTH * 8}]                ;# QP2 CQ
 
 # ---------------------------------------------------------------- global
 reg 0x100000 0
@@ -180,9 +181,9 @@ for {set k0 0} {$k0 < $SQ_DEPTH} {incr k0 16} {
     wr_words $MEM [expr {$SQ_BASE + $k0 * 64}] $words
 }
 qreg 2 0x04 [expr {(0xFFFF << 16) | (64 << 8)}]            ;# P_Key, TTL
-qreg 2 0x08 0x00400000 ; qreg 2 0x10 $SQ_BASE ; qreg 2 0x18 0x00490000
+qreg 2 0x08 0x00400000 ; qreg 2 0x10 $SQ_BASE ; qreg 2 0x18 0x004A0000
 qreg 2 0x20 0x00200004 ; qreg 2 0x28 0x00202004            ;# doorbell addresses end in 0x004
-qreg 2 0x3C [expr {(16 << 16) | $SQ_DEPTH}]               ;# RQ depth 16 (unused), SQ depth 256
+qreg 2 0x3C [expr {(16 << 16) | $SQ_DEPTH}]               ;# RQ depth 16 (unused), SQ depth
 qreg 2 0x40 $host(psn)
 qreg 2 0x44 [expr {(($host(psn) - 1) & 0xFFFFFF) | (4 << 24)}]
 qreg 2 0x48 $host(qpn)

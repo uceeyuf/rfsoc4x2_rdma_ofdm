@@ -13,11 +13,11 @@
 
 #define RL_WIN        0x80000000ull     /* rf_stream window (FPGA memory region 0) */
 #define RL_WIN_RKEY   0x12
-#define RL_CTRL_ADDR  (RL_WIN + 0x200000)
-#define RL_STAT_ADDR  (RL_WIN + 0x200040)
-#define RL_TX_RING    (1u << 20)        /* FPGA TX ring, at most (the status word has the size) */
+#define RL_CTRL_ADDR  (RL_WIN + 0x280000)
+#define RL_STAT_ADDR  (RL_WIN + 0x280040)
+#define RL_TX_RING    (2u << 20)        /* FPGA TX ring, at most (the status word has the size) */
 #define RL_CHUNK      (64u << 10)       /* RX chunk = one RDMA WRITE WITH IMMEDIATE */
-#define RL_SLOTS      256               /* host RX ring slots (= FPGA SQ depth) */
+#define RL_SLOTS      1024              /* host RX ring slots (= FPGA SQ depth): 64 MB, 8 ms */
 
 typedef struct {
     const char         *dev;

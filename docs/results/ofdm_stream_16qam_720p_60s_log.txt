@@ -1,0 +1,192 @@
+attempting to launch hw_server
+
+****** Xilinx hw_server v2023.2
+  **** Build date : Sep 25 2023 at 02:23:13
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+
+INFO: hw_server application started
+INFO: Use Ctrl-C to exit hw_server application
+
+INFO: To connect to this hw_server instance use url: TCP:127.0.0.1:3121
+
+INFO: [Hsi 55-2053] elapsed time for repository (/tools/Xilinx/Vitis/2023.2/data/embeddedsw) loading 0 seconds
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+WARNING: [Common 17-673] Cannot get value of property 'CONFIG.C_BASEADDR' because this property is not valid in conjunction with other property setting on this object.
+INFO: [Common 17-14] Message 'Common 17-673' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
+WARNING: If the reset is being triggered after powering on the device,
+          write bootloop at reset vector address (0xffff0000), or use
+          -clear-registers option, to avoid unpredictable behavior.
+          Further warnings will be suppressed
+running /home/yijie/fpga/rfsoc4x2_rdma_ofdm/sw/vitis_rdma/mts_jtag/Debug/mts_jtag.elf
+MTS DAC tiles 0x5: ok, ADC tiles 0x5: ok
+DAC tile 228 (DAC_B)  state 0xF clock from tile 2 | ADC tile 224 (ADC_C/D)  state 0xF clock from tile 2
+DAC tile 229          state 0xF clock from tile 2 | ADC tile 225            state 0xC clock from tile 2
+DAC tile 230 (DAC_A)  state 0xF PLL locked | ADC tile 226 (ADC_A/B)  state 0xF PLL locked
+DAC tile 231          state 0xF clock from tile 2 | ADC tile 227            state 0xC clock from tile 2
+MTS: DAC latency tile0 104 tile2 104 (offset 0 / 0), ADC latency tile0 96 tile2 96 (offset 0 / 0)
+16-QAM, 10834 payload bytes per OFDM frame, 61035 frames/s = 5.29 Gbit/s of video;
+video 1280x720 yuv420p (1382400 bytes, 30 frames in the loop) = up to 478 video frames/s
+host: rocep2s0 QPN 200, RX ring 1024 x 64 KB at 0x735a4e200000 (R_Key 0x17a291); waiting for build/stream_params.txt.ready
+FPGA TX ring 2048 KB
+  t   TX Gbit/s  RX Gbit/s  frames/s   BER        bad hdr  late  relock  video fps  TX underflow  RX overflow  CPU  throttle
+acquisition: frame found at sample 17051 of chunk 5071, Q sign -1 lag +0
+  1       64.01      63.99     57504   2.01e-10         0     0       0      450.0             0            0   -1 C    -1
+  2       64.00      64.00     61059   1.89e-10         0     0       0      478.0             0            0   -1 C    -1
+  3       64.00      64.00     61035   0.00e+00         0     0       0      478.0             0            0   -1 C    -1
+  4       64.00      64.00     61036   9.45e-10         0     0       0      479.0             0            0   -1 C    -1
+  5       64.00      64.00     61037   1.89e-10         0     0       0      478.0             0            0   -1 C    -1
+  6       64.00      64.00     61032   0.00e+00         0     0       0      478.0             0            0   -1 C    -1
+  7       64.00      64.00     61036   0.00e+00         0     0       0      479.0             0            0   -1 C    -1
+  8       64.00      64.00     61036   1.32e-09         0     0       0      478.0             0            0   -1 C    -1
+  9       64.00      64.00     61036   1.89e-10         0     0       0      478.0             0            0   -1 C    -1
+ 10       64.00      64.00     59891   1.90e-03       132   224       0      467.0             0         3134   -1 C    -1
+ 11       64.00      64.00     61033   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 12       64.00      64.00     61032   9.45e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 13       64.00      64.00     61041   3.78e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 14       64.00      64.00     61034   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 15       64.00      64.00     61035   0.00e+00       132   224       0      478.0             0         3134   -1 C    -1
+ 16       64.00      64.00     61035   1.89e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 17       64.00      64.00     61037   1.32e-09       132   224       0      478.0             0         3134   -1 C    -1
+ 18       64.00      64.00     61035   3.78e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 19       64.00      64.00     61034   7.56e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 20       64.00      64.00     61038   5.67e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 21       64.00      64.00     61032   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 22       64.00      64.00     61036   3.78e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 23       64.00      64.00     61036   3.78e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 24       64.00      64.00     61036   1.89e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 25       64.00      64.00     61035   3.78e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 26       64.00      64.00     61035   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 27       64.00      64.00     61034   3.78e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 28       64.00      64.00     61015   3.78e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 29       64.00      64.00     61056   5.67e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 30       64.00      64.00     61032   3.78e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 31       64.00      64.00     61041   5.67e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 32       64.00      64.00     61034   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 33       64.00      64.00     61036   5.67e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 34       64.00      64.00     61033   3.78e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 35       64.00      64.00     61028   3.78e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 36       64.00      64.00     61016   3.78e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 37       64.00      64.00     61044   1.89e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 38       64.00      64.00     61055   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 39       64.00      64.00     61036   1.89e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 40       64.00      64.00     61034   3.78e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 41       64.00      64.00     61035   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 42       64.00      64.00     61037   1.89e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 43       64.00      64.00     61035   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 44       64.00      64.00     61036   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 45       64.00      64.00     61018   1.70e-09       132   224       0      479.0             0         3134   -1 C    -1
+ 46       64.00      64.00     61042   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 47       64.00      64.00     61044   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 48       64.00      64.00     61036   1.89e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 49       64.00      64.00     61036   3.78e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 50       64.00      64.00     61035   5.67e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 51       64.00      64.00     61035   3.78e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 52       64.00      64.00     61034   9.45e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 53       64.00      64.00     61037   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 54       64.00      64.00     61035   3.78e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 55       64.00      64.00     61035   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 56       64.00      64.00     61038   1.89e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 57       64.00      64.00     61033   1.89e-10       132   224       0      479.0             0         3134   -1 C    -1
+ 58       64.00      64.00     61035   3.78e-10       132   224       0      478.0             0         3134   -1 C    -1
+ 59       64.00      64.00     61036   9.45e-10       132   224       0      478.0             0         3134   -1 C    -1
+saved 120 video frames (1280x720 yuv420p) to build/rx_720p.yuv
+total: TX 480.00 GB, RX 480.00 GB, 0 RX gaps, 0 TX stalls (frame not ready), 0 TX skips; 3657477 frames checked, 9871104 bit errors / 317000846544 (BER 3.11e-05), 132 bad headers, 89 sequence errors, 224 late, 0 missing, 0 relocks, 1 shifts, 28660 video frames (28551 byte-exact); FPGA: TX underflow 0, RX overflow 3134

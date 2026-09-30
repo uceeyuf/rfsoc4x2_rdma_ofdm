@@ -3,7 +3,7 @@
 //
 // rf_stream_host - continuous I/Q streaming with the RFSoC 4x2 over 100G RDMA (ERNIC).
 //
-// TX: a waveform (int16 I / Q, looped) is written into rf_stream's 1 MB TX ring by RDMA WRITE,
+// TX: a waveform (int16 I / Q, looped) is written into rf_stream's 2 MB TX ring by RDMA WRITE,
 //     paced by the ring's read pointer (RDMA READ of the status word); each write is followed by
 //     an 8-byte write of the new write pointer, which RC ordering places after the data.
 // RX: the FPGA sends every 64 KB chunk of ADC samples as an RDMA WRITE WITH IMMEDIATE into a host
@@ -43,7 +43,7 @@ static uint32_t TX_RING = RL_TX_RING;            // from the FPGA status word
 static struct {
     const char *dev, *params, *save;
     double seconds, tone_mhz, amp;
-    int tx, rx, save_chunks, fpga_qpn;
+    int tx, rx, save_chunks, fpga_qpn, src_mb;
     uint32_t psn;
 } O = {.params = "stream_params.txt", .seconds = 10, .tone_mhz = 100, .amp = 0.25, .tx = 1, .rx = 1,
        .fpga_qpn = 2, .psn = 0x100};
@@ -73,6 +73,7 @@ int main(int argc, char **argv)
         else if (!strcmp(k, "--save")) O.save = v;
         else if (!strcmp(k, "--save-chunks")) O.save_chunks = atoi(v);
         else if (!strcmp(k, "--params")) O.params = v;
+        else if (!strcmp(k, "--src-mb")) O.src_mb = atoi(v);    // TX source: N MB (tone repeated), sent in turn
         else { fprintf(stderr, "unknown option %s\n", k); return 1; }
     }
 
@@ -83,15 +84,18 @@ int main(int argc, char **argv)
 
     // buffers: RX ring (FPGA writes), TX waveform, control / status words
     uint8_t *rx = rl_huge_alloc((size_t)SLOTS * CHUNK);
-    int16_t *wave = rl_huge_alloc(TX_RING);
+    size_t src_b = O.src_mb > 0 ? (size_t)O.src_mb << 20 : TX_RING;
+    int16_t *wave = rl_huge_alloc(src_b);
     uint64_t *ctl = rl_huge_alloc(4096), *sts = ctl + 64;
     struct ibv_mr *rx_mr = ibv_reg_mr(L.pd, rx, (size_t)SLOTS * CHUNK, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
-    struct ibv_mr *tx_mr = ibv_reg_mr(L.pd, wave, TX_RING, IBV_ACCESS_LOCAL_WRITE);
+    struct ibv_mr *tx_mr = ibv_reg_mr(L.pd, wave, src_b, IBV_ACCESS_LOCAL_WRITE);
     struct ibv_mr *c_mr = ibv_reg_mr(L.pd, ctl, 4096, IBV_ACCESS_LOCAL_WRITE);
     if (!rx_mr || !tx_mr || !c_mr) die("ibv_reg_mr");
     rl_connect(&L, O.params, (uint64_t)(uintptr_t)rx, rx_mr->rkey, O.fpga_qpn, O.psn);
     TX_RING = rl_status(&L, sts, c_mr->lkey);
     make_tone(wave, TX_RING, O.tone_mhz, O.amp);
+    for (size_t o = TX_RING; o + TX_RING <= src_b; o += TX_RING) memcpy((uint8_t *)wave + o, wave, TX_RING);
+    if (src_b % TX_RING) { fprintf(stderr, "--src-mb must be a multiple of the FPGA TX ring\n"); return 1; }
     printf("FPGA TX ring %u KB\n", TX_RING >> 10);
 
     // ---- helpers on the one QP: all sends signaled, completions only counted
@@ -122,20 +126,23 @@ int main(int argc, char **argv)
     // ---- main loop
     FILE *sv = O.save ? fopen(O.save, "wb") : NULL;
     int saved = 0;
+    double t_st = 0, st_max = 0, wr_max = 0, wq_t[64];
+    uint64_t wq_h = 0, wq_c = 0, fill_min = ~0ull;
     uint64_t rptr = 0, stat_pending = 0, tx_bytes = 0, rx_chunks = 0, gaps = 0, expect = 0;
     double t0 = now(), tlast = t0;
     uint64_t tx_last = 0, rx_last = 0;
     printf("  t     TX Gbit/s  RX Gbit/s   RX chunks  gaps   TX underflow  RX overflow  (FPGA counters)\n");
     while (now() - t0 < O.seconds) {
         // status READ: one at a time
-        if (!stat_pending) { w_st.wr_id = 1; POST(w_st); stat_pending = 1; }
+        if (!stat_pending) { w_st.wr_id = 1; POST(w_st); stat_pending = 1; t_st = now(); }
         // TX: room in the ring (by the last read pointer) -> next piece + write pointer
         if (O.tx && (int64_t)(wptr - rptr) < 0)            // the FPGA read pointer keeps time: skip ahead
             wptr = (rptr + (256u << 10) + TX_PIECE - 1) & ~(uint64_t)(TX_PIECE - 1);
         if (O.tx && (int64_t)(wptr + TX_PIECE - rptr) <= (int64_t)TX_RING) {
             uint32_t off = (uint32_t)(wptr % TX_RING);
-            struct ibv_sge sg = {.addr = (uintptr_t)wave + off, .length = TX_PIECE, .lkey = tx_mr->lkey};
+            struct ibv_sge sg = {.addr = (uintptr_t)wave + wptr % src_b, .length = TX_PIECE, .lkey = tx_mr->lkey};
             struct ibv_send_wr w = {.wr_id = 2, .sg_list = &sg, .num_sge = 1, .opcode = IBV_WR_RDMA_WRITE};
+            wq_t[wq_h++ % 64] = now();          // data writes complete in order
             w.wr.rdma.remote_addr = WIN + off; w.wr.rdma.rkey = WIN_RKEY;
             w.send_flags = IBV_SEND_SIGNALED;
             POST(w);
@@ -149,7 +156,13 @@ int main(int argc, char **argv)
                 fprintf(stderr, "send wr %" PRIu64 ": %s (0x%x)\n", wc[i].wr_id, ibv_wc_status_str(wc[i].status), wc[i].vendor_err);
                 exit(1);
             }
-            if (wc[i].wr_id == 1) { rptr = rl_rptr64(sts[0], wptr); stat_pending = 0; }
+            if (wc[i].wr_id == 1) {
+                rptr = rl_rptr64(sts[0], wptr); stat_pending = 0;
+                double d = now() - t_st; if (d > st_max) st_max = d;
+                if (wptr - rptr < fill_min) fill_min = wptr - rptr;
+            } else if (wc[i].wr_id == 2) {
+                double d = now() - wq_t[wq_c++ % 64]; if (d > wr_max) wr_max = d;
+            }
         }
         // RX: chunk k arrived in slot k
         n = ibv_poll_cq(rcq, 64, wc);
@@ -173,6 +186,9 @@ int main(int argc, char **argv)
                    (tx_bytes - tx_last) * 8 / (t - tlast) / 1e9, (rx_chunks - rx_last) * (double)CHUNK * 8 / (t - tlast) / 1e9,
                    rx_chunks, gaps, sts[1], sts[4], sts[0], wptr);
             fflush(stdout);
+            if (getenv("LAT")) printf("      max status READ %.0f us, max data WRITE %.0f us, min fill %lu KB\n",
+                                      st_max * 1e6, wr_max * 1e6, (unsigned long)(fill_min >> 10));
+            st_max = wr_max = 0; fill_min = ~0ull;
             tx_last = tx_bytes; rx_last = rx_chunks; tlast = t;
         }
     }
