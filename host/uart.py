@@ -3,6 +3,7 @@
 # what comes back until the line is quiet.
 #   python3 host/uart.py [--port /dev/ttyUSB1] [--log build/uart.log] [--quiet S] [--max S] [keys ...]
 # Each key argument is sent as it is (e.g. x f 2); with no keys it only listens.
+# Copyright (c) 2026, Yijie Yu. BSD-3-Clause.
 import argparse
 import sys
 import time

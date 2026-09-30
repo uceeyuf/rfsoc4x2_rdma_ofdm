@@ -40,7 +40,7 @@ host CPU: checker <- OFDM demodulators (12 threads) <- RX ring (64 MB) <--RDMA W
   * **Restarting**: ERNIC keeps its SQ consumer index when a QP is configured again, so the SQ producer index runs on from run to run. The host stops cleanly, waiting until every RX chunk is completed.
 * **Clocks**: ERNIC runs at 200 MHz and the RF fabric at 250 MHz (2.0 GSPS, 8 samples per cycle). The MTS block design (LMK04828 / LMX2594 from the A53, tile 2 PLL, SYSREF 5 MHz) comes from rfsoc4x2_mts.
 * **Host modem** (`host/ofdm_modem.c`): N = 1024, CP = 128, 890 active sub-carriers (±16 … ±460) with 56 pilots. A frame of 32768 samples holds 2 training symbols, 26 data symbols and 512 zeros. The receiver uses a widely linear equaliser that also removes the I/Q image.
-  * FFTW-based.
+  * FFTW-based when libfftw3f is installed (a built-in radix-2 FFT otherwise).
   * Transmitter: about 1 GS/s per core.
   * Receiver: about 310 MS/s per core on a Core Ultra 7 265K.
 * **rf_ofdm** (`host/rf_ofdm.c`):
@@ -79,7 +79,7 @@ A CPU package that reaches TjMax (105 °C) throttles, and each throttle event is
 Requirements:
 * Vivado / Vitis 2023.2 with an ERNIC licence.
 * RFSoC 4x2 board files ([RealDigitalOrg/RFSoC4x2-BSP](https://github.com/RealDigitalOrg/RFSoC4x2-BSP), in `~/fpga/board_files`).
-* rdma-core and libfftw3f.
+* rdma-core; libfftw3f (optional, GPL: see License).
 * The host port at 192.168.100.2/24 with MTU 9000.
 * For clean runs:
   * kernel command line `isolcpus=4-7 nohz_full=4-7 irqaffinity=0-3,8-19`, so the RDMA engine (CPU 7) and the TX threads (CPUs 4-6) run undisturbed;
@@ -124,6 +124,47 @@ python3 host/make_gif.py build/rx.yuv 1280x720 docs/img/ofdm_720p.gif
 
 　
 
+## Citation
+
+If this work helps your research, please cite it:
+
+```bibtex
+@misc{yu2026rfsoc4x2_rdma_ofdm,
+    author = {Yijie Yu},
+    title = {{RFSoC 4x2: 2 GSPS OFDM with the host CPU as the modem, over 100G RDMA}},
+    year = {2026},
+    howpublished = {\url{https://github.com/uceeyuf/rfsoc4x2_rdma_ofdm}},
+    note = {GitHub repository},
+}
+```
+
+GitHub also offers the citation under **Cite this repository** (from [CITATION.cff](CITATION.cff)).
+
+　
+
+## Credits
+
+* RDMA side: [rfsoc4x2_ernic](https://github.com/uceeyuf/rfsoc4x2_ernic).
+* RF side: [rfsoc4x2_mts](https://github.com/uceeyuf/rfsoc4x2_mts).
+* URAM player / capture blocks (`third_party/rfsoc_mts`) and the MTS design approach: [Xilinx/RFSoC-MTS](https://github.com/Xilinx/RFSoC-MTS) (MIT, `third_party/rfsoc_mts/LICENSE`).
+* Clock register values: PYNQ RFSoC4x2 `LMK04828_500.0` / `LMX2594_500.0`.
+* SPI driver: from [RFSoC4x2_clock_LMK_LMX](https://github.com/uceeyuf/RFSoC4x2_clock_LMK_LMX).
+* RF data converter driver: Xilinx `rfdc`.
+* Ethernet / AXI stream modules: Alex Forencich's [verilog-ethernet](https://github.com/alexforencich/verilog-ethernet) (MIT, submodule pinned at `274831c`).
+* PL DDR4 pin constraints (`hw/constraints/4x2_PL_DDR4.xdc`): the RFSoC 4x2 board's DDR4 constraints.
+* Host FFT: [FFTW](https://www.fftw.org) (Frigo and Johnson).
+
+　
+
+## License
+
+* The files of this design are BSD 3-Clause, Copyright (c) 2026, Yijie Yu.
+* `third_party/rfsoc_mts` (AMD) and verilog-ethernet are MIT.
+* ERNIC, CMAC, MIG, the RF data converter and the other AMD IP are generated from their configuration scripts and are not included; they need their own licenses.
+* The host modem uses FFTW (GPL-2.0-or-later) when `libfftw3f` is installed: `host/build.sh` then links it, and binaries built that way fall under the GPL. Without FFTW the built-in FFT is used.
+
+　
+
 <span id="cn">RFSoC 4x2：主机 CPU 做调制解调的 2 GSPS OFDM（100G RDMA）</span>
 ===========================
 
@@ -142,7 +183,7 @@ Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 
   * **按时间走**：TX 读指针从不等待，主机没来得及写的字播放为零，后续样本保持在时间网格上，主机跳帧追上；RX 溢出按整个 512 bit 字丢弃，FPGA 记录丢弃数。
   * **重跑**：ERNIC 重新配置 QP 时保留 SQ 消费指针，因此 SQ 生产指针跨运行累加；主机退出前等所有 RX 块完成。
 * **主机调制解调**（`host/ofdm_modem.c`）：N = 1024、CP = 128，890 个有效子载波，其中 56 个导频；每帧 32768 个样本。
-  * 基于 FFTW。
+  * 装有 libfftw3f 时使用 FFTW，否则用内置的 radix-2 FFT。
   * 发射每核约 1 GS/s，接收每核约 310 MS/s。
   * 接收端用宽线性均衡器，同时去除 I/Q 镜像。
 * **rf_ofdm**（`host/rf_ofdm.c`）：
@@ -174,6 +215,41 @@ CPU 封装达到 TjMax（105 °C）时会热降频，每次降频就是一次这
 
 　
 
-## License
+## 引用
 
-BSD 3-Clause, Copyright (c) 2026 Yijie Yu. `third_party/verilog-ethernet` (MIT) by Alex Forencich.
+如果这个项目对你的研究有帮助，请引用：
+
+```bibtex
+@misc{yu2026rfsoc4x2_rdma_ofdm,
+    author = {Yijie Yu},
+    title = {{RFSoC 4x2: 2 GSPS OFDM with the host CPU as the modem, over 100G RDMA}},
+    year = {2026},
+    howpublished = {\url{https://github.com/uceeyuf/rfsoc4x2_rdma_ofdm}},
+    note = {GitHub repository},
+}
+```
+
+GitHub 仓库页的 **Cite this repository** 也提供同样的引用（来自 [CITATION.cff](CITATION.cff)）。
+
+　
+
+## 致谢
+
+* RDMA 部分：[rfsoc4x2_ernic](https://github.com/uceeyuf/rfsoc4x2_ernic)。
+* 射频部分：[rfsoc4x2_mts](https://github.com/uceeyuf/rfsoc4x2_mts)。
+* URAM 播放 / 采集模块（`third_party/rfsoc_mts`）和 MTS 设计思路：[Xilinx/RFSoC-MTS](https://github.com/Xilinx/RFSoC-MTS)（MIT，`third_party/rfsoc_mts/LICENSE`）。
+* 时钟寄存器值：PYNQ RFSoC4x2 `LMK04828_500.0` / `LMX2594_500.0`。
+* SPI 驱动：来自 [RFSoC4x2_clock_LMK_LMX](https://github.com/uceeyuf/RFSoC4x2_clock_LMK_LMX)。
+* RF 数据转换器驱动：Xilinx `rfdc`。
+* 以太网 / AXI stream 模块：Alex Forencich 的 [verilog-ethernet](https://github.com/alexforencich/verilog-ethernet)（MIT，子模块 `274831c`）。
+* PL DDR4 管脚约束（`hw/constraints/4x2_PL_DDR4.xdc`）：RFSoC 4x2 板卡的 DDR4 约束。
+* 主机端 FFT：[FFTW](https://www.fftw.org)（Frigo 与 Johnson）。
+
+　
+
+## 许可证
+
+* 本设计的文件采用 BSD 3-Clause，版权所有 (c) 2026 Yijie Yu。
+* `third_party/rfsoc_mts`（AMD）与 verilog-ethernet 为 MIT。
+* ERNIC、CMAC、MIG、RF 数据转换器等 AMD IP 由配置脚本生成，不包含在仓库中，需要各自的许可证。
+* 主机调制解调在装有 `libfftw3f` 时使用 FFTW（GPL-2.0-or-later）：此时 `host/build.sh` 会链接它，这样构建出的程序受 GPL 约束；没有 FFTW 时使用内置 FFT。

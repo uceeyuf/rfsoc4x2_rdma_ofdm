@@ -1,0 +1,52 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite it as below."
+type: software
+title: "RFSoC 4x2: 2 GSPS OFDM with the host CPU as the modem, over 100G RDMA"
+authors:
+  - family-names: "Yu"
+    given-names: "Yijie"
+repository-code: "https://github.com/uceeyuf/rfsoc4x2_rdma_ofdm"
+url: "https://github.com/uceeyuf/rfsoc4x2_rdma_ofdm"
+date-released: 2026-09-30
+license: BSD-3-Clause
+keywords:
+  - "RFSoC"
+  - "OFDM"
+  - "RDMA"
+  - "RoCE v2"
+  - "ERNIC"
+  - "multi-tile synchronization"
+  - "100GbE"
+  - "FPGA"
+references:
+  - type: software
+    title: "RFSoC 4x2 100G RDMA with ERNIC"
+    authors:
+      - family-names: "Yu"
+        given-names: "Yijie"
+    url: "https://github.com/uceeyuf/rfsoc4x2_ernic"
+  - type: software
+    title: "RFSoC 4x2 Multi-Tile Synchronization"
+    authors:
+      - family-names: "Yu"
+        given-names: "Yijie"
+    url: "https://github.com/uceeyuf/rfsoc4x2_mts"
+  - type: software
+    title: "RFSoC-MTS"
+    authors:
+      - name: "Advanced Micro Devices, Inc."
+    url: "https://github.com/Xilinx/RFSoC-MTS"
+  - type: software
+    title: "verilog-ethernet"
+    authors:
+      - family-names: "Forencich"
+        given-names: "Alex"
+    url: "https://github.com/alexforencich/verilog-ethernet"
+  - type: software
+    title: "FFTW"
+    authors:
+      - family-names: "Frigo"
+        given-names: "Matteo"
+      - family-names: "Johnson"
+        given-names: "Steven G."
+    url: "https://www.fftw.org"
