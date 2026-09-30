@@ -38,6 +38,11 @@ static double SNR = 35, SECS = 2, RMS = 0.18;
 static int16_t rx_i[2 * OFDM_FRAME], rx_q[2 * OFDM_FRAME];
 static ofdm_result locked;
 static atomic_int go;
+static int mode;                        /* threads: 0 streaming receiver (rails), 1 receiver on the
+                                           stream memory format, 2 streaming transmitter */
+static int16_t *rx_mem, *tx_mem;
+static uint8_t *tx_bits;
+static double gain;
 
 static double gauss(void)
 {
@@ -59,10 +64,14 @@ static void *worker(void *arg)
     while (!atomic_load(&go)) {}
     double t0 = now();
     long n = 0;
+    int16_t *mem = aligned_alloc(64, OFDM_FRAME * 4);
     while (now() - t0 < SECS) {
-        ofdm_demod_stream(c, M, rx_i, rx_q, locked.frame_pos, locked.q_sign, bits);
+        if (mode == 0) ofdm_demod_stream(c, M, rx_i, rx_q, locked.frame_pos, locked.q_sign, bits);
+        else if (mode == 1) ofdm_demod_stream_mem(c, M, rx_mem, locked.frame_pos, locked.q_sign, bits);
+        else ofdm_mod_stream(c, M, gain, tx_bits, mem);
         n++;
     }
+    free(mem);
     t->frames = n;
     ofdm_free(c);
     return NULL;
@@ -134,12 +143,41 @@ int main(int argc, char **argv)
            "  streaming receiver               %8.1f us  = %6.1f MS/s  (bits: %ld errors / %d)\n",
            sched_getcpu(), t_mod * 1e6, OFDM_FRAME / t_mod / 1e6, t_acq * 1e6, t_trk * 1e6,
            OFDM_FRAME / t_trk / 1e6, t_str * 1e6, OFDM_FRAME / t_str / 1e6, be, nb);
-    printf("  real time at 2 GSPS: %.0f cores for the streaming receiver, %.0f for the modulator\n",
-           t_str / frame_s, t_mod / frame_s);
+    /* streaming transmitter on random payload bits -> stream memory format, looped with the same
+       offset and noise -> streaming receiver on the memory format */
+    int fb = ofdm_frame_bits(M);
+    tx_bits = calloc(fb / 8 + 8, 1);
+    for (int b = 0; b < fb / 8; b++) tx_bits[b] = (uint8_t)rand();
+    gain = ofdm_stream_gain(RMS);
+    tx_mem = aligned_alloc(64, OFDM_FRAME * 4);
+    rx_mem = aligned_alloc(64, 2 * OFDM_FRAME * 4);
+    int sclip = ofdm_mod_stream(c, M, gain, tx_bits, tx_mem);
+    for (int n = 0; n < 2 * OFDM_FRAME; n++) {
+        int k = (n + shift) % OFDM_FRAME;
+        rx_mem[(n >> 3) * 16 + (n & 7)] = (int16_t)lround(tx_mem[(k >> 3) * 16 + (k & 7)] + sd * gauss());
+        rx_mem[(n >> 3) * 16 + 8 + (n & 7)] = (int16_t)lround(tx_mem[(k >> 3) * 16 + 8 + (k & 7)] + sd * gauss());
+    }
+    int nb2 = ofdm_demod_stream_mem(c, M, rx_mem, locked.frame_pos, locked.q_sign, got);
+    long be2 = 0;
+    for (int b = 0; b < nb2; b++) be2 += ((got[b >> 3] ^ tx_bits[b >> 3]) >> (b & 7)) & 1;
+    t0 = now();
+    for (int i = 0; i < reps * 5; i++) ofdm_mod_stream(c, M, gain, tx_bits, tx_mem);
+    double t_smod = (now() - t0) / (reps * 5);
+    t0 = now();
+    for (int i = 0; i < reps * 5; i++) ofdm_demod_stream_mem(c, M, rx_mem, locked.frame_pos, locked.q_sign, got);
+    double t_smem = (now() - t0) / (reps * 5);
+    printf("  streaming transmitter            %8.1f us  = %6.1f MS/s  (memory format, %d clipped)\n"
+           "  streaming receiver, memory fmt   %8.1f us  = %6.1f MS/s  (random bits: %ld errors / %d)\n",
+           t_smod * 1e6, OFDM_FRAME / t_smod / 1e6, sclip, t_smem * 1e6, OFDM_FRAME / t_smem / 1e6, be2, nb2);
+    printf("  real time at 2 GSPS: %.1f cores for the streaming receiver, %.1f for the streaming transmitter\n",
+           t_smem / frame_s, t_smod / frame_s);
 
     /* threads: P-cores 0..7 first, then E-cores 8..19 */
-    printf("\nstreaming receiver, threads on CPUs 0..T-1 (P-cores 0-7, then E-cores)\n"
-           "threads  frames/s   demod MS/s   real-time share of 2 GSPS   bandwidth   %d-QAM PHY rate\n", 1 << M);
+    static const char *mname[3] = {"streaming receiver (rails)", "streaming receiver (memory format)",
+                                   "streaming transmitter (memory format)"};
+    for (mode = 1; mode <= 2; mode++) {
+    printf("\n%s, threads on CPUs 0..T-1 (P-cores 0-7, then E-cores)\n"
+           "threads  frames/s        MS/s   real-time share of 2 GSPS   bandwidth   %d-QAM PHY rate\n", mname[mode], 1 << M);
     for (int j = 0; j < nth; j++) {
         int T = NTH[j];
         pthread_t th[32];
@@ -158,6 +196,7 @@ int main(int argc, char **argv)
         double fps = tot / SECS, sps = fps * OFDM_FRAME;
         printf("%7d  %9.0f   %10.1f   %24.2f %%   %6.1f MHz   %8.2f Gb/s\n", T, fps, sps / 1e6,
                100 * sps / fs, sps * occ / 1e6, ofdm_rate_bps(M, sps) / 1e9);
+    }
     }
     ofdm_free(c);
     return 0;

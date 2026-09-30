@@ -1,12 +1,13 @@
 # Program the RFSoC4x2 over JTAG and start the application on A53 #0.
-#   xsct run_jtag.tcl
+#   xsct run_jtag.tcl [workspace]     (sw/vitis_ws by default; sw/vitis_rdma for the RDMA OFDM design)
 # Copyright (c) 2026, Yijie Yu. BSD-3-Clause.
 
 set here [file normalize [file dirname [info script]]]
-set hw   $here/vitis_ws/mts_pf/export/mts_pf/hw
+set ws   [expr {$argc > 0 ? [file normalize [lindex $argv 0]] : "$here/vitis_ws"}]
+set hw   $ws/mts_pf/export/mts_pf/hw
 set xsa  [lindex [glob $hw/*.xsa] 0]
 set bit  [lindex [glob $hw/*.bit] 0]
-set elf  $here/vitis_ws/mts_jtag/Debug/mts_jtag.elf
+set elf  $ws/mts_jtag/Debug/mts_jtag.elf
 
 connect
 targets -set -nocase -filter {name =~ "APU*"}

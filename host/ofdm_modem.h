@@ -48,6 +48,19 @@ int ofdm_demod(ofdm_ctx *c, int bits_per_sym, const int16_t *ci, const int16_t *
 int ofdm_demod_stream(ofdm_ctx *c, int bits_per_sym, const int16_t *ci, const int16_t *cq,
                       int frame_pos, int q_sign, uint8_t *bits_out);
 
+/* the same on the stream memory format (per 16 int16: 8 I samples, then 8 Q samples), with the
+   first training body at sample p >= 136 of mem (no wrap) */
+int ofdm_demod_stream_mem(ofdm_ctx *c, int bits_per_sym, const int16_t *mem, int p, int q_sign,
+                          uint8_t *bits_out);
+
+/* streaming transmitter: one frame (OFDM_FRAME samples) of the given payload bits (packed LSB
+   first, ofdm_frame_bits() of them = a whole number of bytes; the buffer must be readable 8 bytes
+   beyond) in the stream memory format, scaled by ofdm_stream_gain(); returns clipped values.
+   The receiver's output bits are the same bits in the same order. */
+int    ofdm_frame_bits(int bits_per_sym);
+double ofdm_stream_gain(double rms_fs);
+int    ofdm_mod_stream(ofdm_ctx *c, int bits_per_sym, double gain, const uint8_t *bits, int16_t *mem);
+
 /* the payload bits the transmitter sends in one frame, packed LSB first; returns the count */
 int ofdm_ref_bits(int bits_per_sym, uint8_t *bits_out);
 

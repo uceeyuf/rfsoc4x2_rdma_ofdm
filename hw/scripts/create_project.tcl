@@ -1,0 +1,55 @@
+# Create the combined Vivado project: ERNIC (100G RDMA) + the MTS block design + rf_stream.
+# Vivado 2023.2; the ERNIC and CMAC need licenses; the RFSoC 4x2 board files are looked up in
+# $RFSOC4X2_BOARD_FILES, default ~/fpga/board_files (RealDigitalOrg/RFSoC4x2-BSP board_files/).
+#   vivado -mode batch -source hw/scripts/create_project.tcl
+# Copyright (c) 2026, Yijie Yu. BSD-3-Clause.
+set here     [file normalize [file join [file dirname [info script]] .. ..]]
+set proj_dir [file join $here build rdma_ofdm]
+set bf [expr {[info exists ::env(RFSOC4X2_BOARD_FILES)] ? $::env(RFSOC4X2_BOARD_FILES) : "$::env(HOME)/fpga/board_files"}]
+set_param board.repoPaths [list $bf]
+
+create_project rdma_ofdm $proj_dir -part xczu48dr-ffvg1517-2-e -force
+set_property board_part realdigital.org:rfsoc4x2:part0:1.0 [current_project]
+set_property target_language Verilog [current_project]
+
+set ve [file join $here third_party verilog-ethernet]
+add_files -norecurse -fileset sources_1 [concat [glob [file join $here hw rtl *.v]] \
+    [file join $here third_party rfsoc_mts DACRAMstreamer.v] [file join $here third_party rfsoc_mts ADCRAMcapture.v] \
+    [file join $ve lib axis rtl axis_fifo.v] [file join $ve lib axis rtl axis_async_fifo.v] \
+    [file join $ve lib axis rtl axis_arb_mux.v] [file join $ve lib axis rtl arbiter.v] \
+    [file join $ve lib axis rtl priority_encoder.v] \
+    [file join $ve lib axis rtl sync_reset.v]]
+update_compile_order -fileset sources_1
+
+# ERNIC side
+import_ip [file join $here hw ip ddr4_0 ddr4_0.xci]
+upgrade_ip -quiet [get_ips ddr4_0]
+set_property CONFIG.C0.DDR4_AxiNarrowBurst {true} [get_ips ddr4_0]
+foreach t {cmac_usplus_0 ernic_0 axi_ic_0 jtag_axi vio_0} { source [file join $here hw ip $t.tcl] }
+
+# RF side: the MTS block design with the ports for rf_stream
+set bd_name mts
+set integrate 1
+source [file join $here hw scripts mts_bd.tcl]
+validate_bd_design
+save_bd_design
+make_wrapper -files [get_files $bd_name.bd] -top -import      ;# the wrapper file; the top is rdma_ofdm_top
+set_property top rdma_ofdm_top [get_filesets sources_1]
+
+add_files -norecurse -fileset constrs_1 [list [file join $here hw constraints fpga.xdc] \
+    [file join $here hw constraints 4x2_PL_DDR4.xdc] [file join $here hw constraints mts.xdc] \
+    [file join $here hw constraints cdc.xdc]]
+set_property target_constrs_file [file join $here hw constraints fpga.xdc] [get_filesets constrs_1]
+foreach t {sync_reset.tcl axis_async_fifo.tcl} {
+    set f [file join $ve lib axis syn vivado $t]
+    add_files -norecurse -fileset constrs_1 $f
+    set_property file_type TCL [get_files $f]
+    set_property used_in_synthesis false [get_files $f]
+    set_property processing_order LATE [get_files $f]
+}
+
+set_property strategy Performance_ExplorePostRoutePhysOpt [get_runs impl_1]
+update_compile_order -fileset sources_1
+generate_target all [get_ips -exclude_bd_ips]
+generate_target all [get_files $bd_name.bd]
+puts "Project created: [file join $proj_dir rdma_ofdm.xpr]"

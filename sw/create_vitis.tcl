@@ -1,10 +1,12 @@
 # Vitis 2023.2 (classic, xsct) workspace for the RFSoC4x2 MTS application.
-#   xsct create_vitis.tcl [path/to/design_1_wrapper.xsa]
+#   xsct create_vitis.tcl [path/to/design.xsa [workspace]]
+# (build/mts_wrapper.xsa into sw/vitis_ws by default; the RDMA OFDM design:
+#  xsct sw/create_vitis.tcl build/rdma_ofdm.xsa sw/vitis_rdma)
 # Copyright (c) 2026, Yijie Yu. BSD-3-Clause.
 
 set here [file normalize [file dirname [info script]]]
 set xsa  [expr {[llength $argv] > 0 ? [file normalize [lindex $argv 0]] : "$here/../build/mts_wrapper.xsa"}]
-set ws   $here/vitis_ws
+set ws   [expr {[llength $argv] > 1 ? [file normalize [lindex $argv 1]] : "$here/vitis_ws"}]
 
 file delete -force $ws
 setws $ws

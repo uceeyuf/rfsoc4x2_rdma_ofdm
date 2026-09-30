@@ -1,6 +1,11 @@
 build/
 sw/vitis_ws/
+sw/vitis_rdma/
 *.jou
 *.log
 .Xil/
 host/ofdm_bench
+host/rf_stream_host
+host/rf_ofdm
+*.ready
+stream_params.txt
