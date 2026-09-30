@@ -46,19 +46,12 @@ uint32_t rl_status(rlink *l, uint64_t *sts, uint32_t sts_lkey);
 
 /* the FPGA's TX read pointer (status +0x00) is a 32-bit word count in bytes, 38 bits: extend
    it to 64 bits next to the host's write pointer (within 2^37 bytes of it) */
-static inline uint64_t rl_rptr64_bits(uint64_t sts0, uint64_t wptr, int bits)
+static inline uint64_t rl_rptr64(uint64_t sts0, uint64_t wptr)
 {
-    const uint64_t m = (1ull << bits) - 1;
-    int64_t d = (int64_t)(((wptr - sts0) & m) << (64 - bits)) >> (64 - bits);   /* wptr - rptr */
+    const uint64_t m = (1ull << 38) - 1;
+    int64_t d = (int64_t)(((wptr - sts0) & m) << 26) >> 26;   /* sign-extended wptr - rptr */
     return wptr - (uint64_t)d;
 }
-static inline uint64_t rl_rptr64(uint64_t sts0, uint64_t wptr) { return rl_rptr64_bits(sts0, wptr, 38); }
-
-#define RL_COEF_ADDR  (RL_WIN + 0x288000)   /* demodulator coefficients: pair p at + 64 p */
-
-/* the FPGA has the OFDM modulator (status magic 'RFSTRM02' or later), the demodulator
-   ('RFSTRM03'); set by rl_status */
-extern int rl_modulator, rl_demodulator;
 
 /* TX / RX off, then wait until the FPGA's RX chunks are all sent and completed (a clean QP for
    the next run) */

@@ -14,10 +14,6 @@
  *   rf_ofdm [--m 4] [--rms 0.18] [--seconds 10] [--tx-threads 3] [--rx-threads 12]
  *           [--video WxH | --yuv FILE --size WxH] [--vframes 30]
  *           [--save FILE --save-frames N --save-every K (every K-th received video frame)]
- *           [--fpga-tx 1 (the FPGA modulates: the host sends payloads, 32 KB slots)]
- *           [--fpga-rx 1 (after the first lock the FPGA demodulates: the host computes the channel
- *            coefficients from 4 frames of samples, sends them and switches the FPGA RX ring to
- *            payload slots of 32 KB; the checker takes the payloads from there)]
  *           [--dump FILE --dump-frames K (raw ADC samples of K frames after the first lock, for
  *            host/ofdm_plots: spectrum and constellation)]
  *           [--dev NAME] [--params FILE] [--sim 1]
@@ -31,7 +27,6 @@
 
 #define _GNU_SOURCE
 #include "ofdm_modem.h"
-#include "ofdm_rxcoef.h"
 #include "rdma_link.h"
 
 #include <arpa/inet.h>
@@ -53,13 +48,12 @@
 #define CH_SAMP     (RL_CHUNK / 4)                  /* samples per RX chunk */
 #define NOUT        256                             /* demodulated payloads waiting for the checker */
 #define PIECE       (64u << 10)
-#define SLOT_B      (32u << 10)                     /* --fpga-tx: payload slot in the FPGA ring */
 #define MAGIC       0x4D44464Fu                     /* "OFDM" */
 #define HDR         8                               /* magic, sequence number */
 
 static struct {
     const char *dev, *params, *yuv, *save, *dump;
-    int m, tx_threads, rx_threads, w, h, vframes, save_frames, save_every, dump_frames, sim, sim_free, sim_slip, fpga_tx, fpga_rx;
+    int m, tx_threads, rx_threads, w, h, vframes, save_frames, save_every, dump_frames, sim, sim_free, sim_slip;
     double rms, seconds;
 } O = {.params = "stream_params.txt", .m = 4, .tx_threads = 3, .rx_threads = 12, .w = 1280, .h = 720,
        .vframes = 30, .save_every = 1, .dump_frames = 64, .rms = 0.18, .seconds = 10};
@@ -83,17 +77,6 @@ static _Atomic uint64_t rx_chunks;          /* chunks arrived, in order */
 static uint64_t rx_slot0;                   /* ring slot of the first chunk (ERNIC's SQ index) */
 static _Atomic int stop;
 static double t_start;                      /* stream start (TX / RX on) */
-
-/* --fpga-rx: the checker fills coef_words and dem_ctl2, sets dem_req = 1; the engine sends them and
-   switches the FPGA demodulator on (2), and sets dem_chunk when the status word shows its first
-   chunk (3). The RX threads stop (rx_host_off). */
-#define NAVG        4                       /* frames of training averaged for the coefficients */
-static uint8_t *coef_words;                 /* OFDM_NK x 64 bytes, registered */
-static uint64_t dem_ctl2;                   /* control word bytes 16..23: gain (float32), window */
-static int dem_qneg;
-static _Atomic int dem_req, rx_host_off;
-static _Atomic uint64_t dem_chunk;          /* the run's first chunk of payload slots */
-static _Atomic uint32_t rx_t0;              /* RX time of the run's first sample (RF cycles) */
 
 /* frame lock: in lock generation g, frame j (j >= jstart) has its first training body at stream
    sample S0 + j * FRAME. A TX underflow shifts the frames; the checker then locks again (g + 1). */
@@ -200,11 +183,9 @@ static void *tx_thread(void *arg)
         while (f >= atomic_load_explicit(&tx_done, memory_order_acquire) + NTX)
             if (atomic_load_explicit(&stop, memory_order_relaxed)) goto out; else _mm_pause();
         uint32_t h[2] = {MAGIC, (uint32_t)f};
-        /* --fpga-tx: the scrambled payload goes to the FPGA as it is */
-        uint8_t *dst = O.fpga_tx ? txr + (f % NTX) * SLOT_B : bits;
-        xor_bytes(dst, (const uint8_t *)h, scr, HDR);
-        xor_bytes(dst + HDR, payload_src(f), scr + HDR, PL);
-        if (!O.fpga_tx) ofdm_mod_stream(c, O.m, gain, bits, (int16_t *)(txr + (f % NTX) * FRAME_B));
+        xor_bytes(bits, (const uint8_t *)h, scr, HDR);
+        xor_bytes(bits + HDR, payload_src(f), scr + HDR, PL);
+        ofdm_mod_stream(c, O.m, gain, bits, (int16_t *)(txr + (f % NTX) * FRAME_B));
         atomic_store_explicit(&tx_ready[f % NTX], f + 1, memory_order_release);
     }
 out:
@@ -228,7 +209,7 @@ static void *rx_thread(void *arg)
         if (atomic_load_explicit(&lock_gen, memory_order_acquire) != g) continue
     while (!atomic_load_explicit(&stop, memory_order_relaxed)) {
         uint64_t cg = atomic_load_explicit(&lock_gen, memory_order_acquire);
-        if (!cg || atomic_load_explicit(&rx_host_off, memory_order_relaxed)) { usleep(1000); continue; }
+        if (!cg) { usleep(100); continue; }
         if (cg != g) { g = cg; lk = locks[g % 4]; j = lk.jstart + t->id; }
         int64_t s = lk.S0 + j * OFDM_FRAME;                 /* first training body */
         int64_t b = (s - 256) & ~(int64_t)7;                /* start of the samples handed over */
@@ -322,66 +303,6 @@ static int acquire(ofdm_ctx *c, int16_t *ci, int16_t *cq, struct lock *lk)
     return bad;
 }
 
-/* --fpga-rx: the coefficients from the training symbols of NAVG frames from lk->jstart on (a
-   double-precision FFT standing in for the FPGA's), the frame grid in RX time, then the switch;
-   returns the host stream byte of the first payload slot, or -1 */
-static int64_t fpga_rx_switch(const struct lock *lk)
-{
-    int64_t s0 = lk->S0 + lk->jstart * OFDM_FRAME, b = (s0 - 256) & ~(int64_t)7;
-    size_t bytes = (size_t)NAVG * FRAME_B + 4096;
-    while ((int64_t)atomic_load(&rx_chunks) * CH_SAMP < b + (int64_t)(bytes / 4))
-        if (atomic_load(&stop)) return -1; else usleep(100);
-    int16_t *buf = malloc(bytes);
-    memcpy(buf, rxr + (rx_slot0 * RL_CHUNK + (size_t)b * 4) % RING_B, bytes);
-    if (atomic_load(&rx_chunks) - (uint64_t)(b / CH_SAMP) >= RL_SLOTS - 1) { free(buf); return -1; }
-    static int32_t yr[OFDM_N], yi[OFDM_N], s0r[OFDM_N], s0i[OFDM_N], s1r[OFDM_N], s1i[OFDM_N];
-    static ofdm_rxcoef cf[OFDM_NK];
-    memset(s0r, 0, sizeof(s0r)); memset(s0i, 0, sizeof(s0i)); memset(s1r, 0, sizeof(s1r)); memset(s1i, 0, sizeof(s1i));
-    for (int fr = 0; fr < NAVG; fr++)
-        for (int sy = 0; sy < 2; sy++) {
-            ofdm_rx_fft18(buf, (long)(s0 - b) + (long)fr * OFDM_FRAME - OFDM_RX_BACKOFF + (long)sy * OFDM_SYM, lk->q_sign, 4, yr, yi);
-            for (int k = 0; k < OFDM_N; k++) {
-                if (sy) { s1r[k] += yr[k]; s1i[k] += yi[k]; } else { s0r[k] += yr[k]; s0i[k] += yi[k]; }
-            }
-        }
-    free(buf);
-    int ex;
-    float mmax, g = ofdm_rx_coef(O.m, NAVG, s0r, s0i, s1r, s1i, cf, &ex, &mmax);
-    for (int i = 0; i < OFDM_NK; i++) ofdm_rx_coef_word(&cf[i], coef_words + 64 * i);
-    /* symbol 0's FFT window in RX time (the stream's sample 0 is at 8 x rx_t0), mod 32768 */
-    uint32_t win = (uint32_t)(8 * (int64_t)atomic_load(&rx_t0) + s0 - OFDM_RX_BACKOFF) & 32767;
-    uint32_t gb;
-    memcpy(&gb, &g, 4);
-    dem_ctl2 = gb | (uint64_t)win << 32;
-    dem_qneg = lk->q_sign < 0;
-    printf("FPGA RX: coefficients from %d frames (max %.3e, exponent %d), rotation gain %.6e, window %u, Q %s\n",
-           NAVG, mmax, ex, g, win, dem_qneg ? "inverted" : "as is");
-    atomic_store(&rx_host_off, 1);
-    atomic_store(&dem_req, 1);
-    while (atomic_load(&dem_req) != 3)
-        if (atomic_load(&stop)) return -1; else usleep(100);
-    uint64_t ch = atomic_load(&dem_chunk);
-    printf("FPGA RX: payloads from chunk %" PRIu64 " on\n", ch);
-    fflush(stdout);
-    return (int64_t)(ch * RL_CHUNK);
-}
-
-/* --fpga-rx: payload j of the FPGA demodulator (its 32 KB slot at host stream byte dem_off + j x
-   32 KB) to the checker's buffer; returns 1 on stop */
-static int fpga_payload(int64_t dem_off, int64_t j)
-{
-    uint64_t off = (uint64_t)dem_off + (uint64_t)j * SLOT_B;
-    int bo = 0;
-    while (atomic_load_explicit(&rx_chunks, memory_order_acquire) * RL_CHUNK < off + SLOT_B) {
-        if (atomic_load_explicit(&stop, memory_order_relaxed)) return 1;
-        backoff(&bo);
-    }
-    memcpy(outb + (size_t)(j % NOUT) * (FB + 8), rxr + (rx_slot0 * RL_CHUNK + off) % RING_B, FB);
-    atomic_store_explicit(&out_late[j % NOUT], atomic_load(&rx_chunks) - off / RL_CHUNK >= RL_SLOTS - 1,
-                          memory_order_relaxed);
-    return 0;
-}
-
 static void *checker(void *arg)
 {
     pin(*(int *)arg);
@@ -407,69 +328,56 @@ static void *checker(void *arg)
     uint64_t g = 0;
     uint32_t over_lock = 0;
     int bad_run = 1 << 20;                                  /* start by locking */
-    int64_t dem_off = -1;                                   /* --fpga-rx: host stream byte of slot 0 */
     while (!atomic_load_explicit(&stop, memory_order_relaxed)) {
         uint32_t over = atomic_load_explicit(&rx_over_seen, memory_order_relaxed);
-        if (dem_off >= 0) {
-            /* --fpga-rx: payload j from its slot */
-            if (fpga_payload(dem_off, j)) goto out;
-        } else {
-            if (g && bad_run >= 4 && over != over_lock) {
-                /* the FPGA dropped RX words: every later frame is 16 samples per word earlier */
-                struct lock lk = locks[g % 4];
-                lk.S0 -= 16 * (int64_t)(uint32_t)(over - over_lock);
-                lk.jstart = ((int64_t)atomic_load(&rx_chunks) * CH_SAMP - lk.S0) / OFDM_FRAME + 2;
-                over_lock = over;
-                atomic_fetch_add(&st_shift, 1);
-                g++;
-                locks[g % 4] = lk;
-                j = lk.jstart;
-                atomic_store_explicit(&next_j, j, memory_order_release);
-                atomic_store_explicit(&lock_gen, g, memory_order_release);
-                seq0 = -1;
-                bad_run = 0;
-                continue;
+        if (g && bad_run >= 4 && over != over_lock) {
+            /* the FPGA dropped RX words: every later frame is 16 samples per word earlier */
+            struct lock lk = locks[g % 4];
+            lk.S0 -= 16 * (int64_t)(uint32_t)(over - over_lock);
+            lk.jstart = ((int64_t)atomic_load(&rx_chunks) * CH_SAMP - lk.S0) / OFDM_FRAME + 2;
+            over_lock = over;
+            atomic_fetch_add(&st_shift, 1);
+            g++;
+            locks[g % 4] = lk;
+            j = lk.jstart;
+            atomic_store_explicit(&next_j, j, memory_order_release);
+            atomic_store_explicit(&lock_gen, g, memory_order_release);
+            seq0 = -1;
+            bad_run = 0;
+            continue;
+        }
+        if (bad_run >= 32) {
+            /* (re)lock: frame search on the newest samples */
+            struct lock lk;
+            over_lock = atomic_load_explicit(&rx_over_seen, memory_order_relaxed);
+            if (acquire(c, ci, cq, &lk)) { usleep(1000); continue; }
+            if (g) atomic_fetch_add(&st_relock, 1);
+            g++;
+            locks[g % 4] = lk;
+            j = lk.jstart;
+            atomic_store_explicit(&next_j, j, memory_order_release);
+            atomic_store_explicit(&lock_gen, g, memory_order_release);
+            seq0 = -1;
+            bad_run = 0;
+            if (g == 1 && O.dump) dump_frames(&lk);
+        }
+        /* wait for frame j; give up on it when the stream is well past it (a worker dropped it) */
+        struct lock *lk = &locks[g % 4];
+        double tw = 0;
+        int missing = 0, bo = 0;
+        while (atomic_load_explicit(&out_tag[j % NOUT], memory_order_acquire) != TAG(g, j)) {
+            if (atomic_load_explicit(&stop, memory_order_relaxed)) goto out;
+            if ((int64_t)atomic_load(&rx_chunks) * CH_SAMP > lk->S0 + (j + 120) * OFDM_FRAME) {
+                if (tw == 0) tw = rl_now();
+                else if (rl_now() - tw > 0.02) { missing = 1; break; }
             }
-            if (bad_run >= 32) {
-                /* (re)lock: frame search on the newest samples */
-                struct lock lk;
-                over_lock = atomic_load_explicit(&rx_over_seen, memory_order_relaxed);
-                if (acquire(c, ci, cq, &lk)) { usleep(1000); continue; }
-                if (g) atomic_fetch_add(&st_relock, 1);
-                g++;
-                locks[g % 4] = lk;
-                j = lk.jstart;
-                atomic_store_explicit(&next_j, j, memory_order_release);
-                atomic_store_explicit(&lock_gen, g, memory_order_release);
-                seq0 = -1;
-                bad_run = 0;
-                if (g == 1 && O.dump) dump_frames(&lk);
-                if (g == 1 && O.fpga_rx) {
-                    dem_off = fpga_rx_switch(&lk);
-                    if (dem_off < 0) goto out;
-                    j = 0;
-                    seq0 = -1;
-                    continue;
-                }
-            }
-            /* wait for frame j; give up on it when the stream is well past it (a worker dropped it) */
-            struct lock *lk = &locks[g % 4];
-            double tw = 0;
-            int missing = 0, bo = 0;
-            while (atomic_load_explicit(&out_tag[j % NOUT], memory_order_acquire) != TAG(g, j)) {
-                if (atomic_load_explicit(&stop, memory_order_relaxed)) goto out;
-                if ((int64_t)atomic_load(&rx_chunks) * CH_SAMP > lk->S0 + (j + 120) * OFDM_FRAME) {
-                    if (tw == 0) tw = rl_now();
-                    else if (rl_now() - tw > 0.02) { missing = 1; break; }
-                }
-                backoff(&bo);
-            }
-            if (missing) {
-                atomic_fetch_add(&st_missing, 1);
-                bad_run++;
-                atomic_store_explicit(&next_j, ++j, memory_order_release);
-                continue;
-            }
+            backoff(&bo);
+        }
+        if (missing) {
+            atomic_fetch_add(&st_missing, 1);
+            bad_run++;
+            atomic_store_explicit(&next_j, ++j, memory_order_release);
+            continue;
         }
         uint8_t *o = outb + (size_t)(j % NOUT) * (FB + 8);
         xor_bytes(o, o, scr, FB);
@@ -697,8 +605,6 @@ int main(int argc, char **argv)
         else if (!strcmp(k, "--save-frames")) O.save_frames = atoi(v);
         else if (!strcmp(k, "--save-every")) O.save_every = atoi(v) > 0 ? atoi(v) : 1;
         else if (!strcmp(k, "--dump")) O.dump = v;
-        else if (!strcmp(k, "--fpga-tx")) O.fpga_tx = atoi(v);
-        else if (!strcmp(k, "--fpga-rx")) O.fpga_rx = atoi(v);
         else if (!strcmp(k, "--dump-frames")) O.dump_frames = atoi(v);
         else if (!strcmp(k, "--dev")) O.dev = v;
         else if (!strcmp(k, "--params")) O.params = v;
@@ -725,7 +631,6 @@ int main(int argc, char **argv)
     txr = rl_huge_alloc((size_t)NTX * FRAME_B);
     rxr = rl_mirror_alloc(RING_B);
     outb = rl_huge_alloc((size_t)NOUT * (FB + 8));
-    if (O.sim && O.fpga_rx) { fprintf(stderr, "--fpga-rx needs the board\n"); return 1; }
     if (O.sim) return simulate();
     rlink L;
     rl_open(&L, O.dev, 1000);
@@ -733,16 +638,14 @@ int main(int argc, char **argv)
     struct ibv_mr *rx_mr = ibv_reg_mr(L.pd, rxr, RING_B, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
     struct ibv_mr *tx_mr = ibv_reg_mr(L.pd, txr, (size_t)NTX * FRAME_B, IBV_ACCESS_LOCAL_WRITE);
     struct ibv_mr *c_mr = ibv_reg_mr(L.pd, ctl, 4096, IBV_ACCESS_LOCAL_WRITE);
-    coef_words = rl_huge_alloc(OFDM_NK * 64);
-    struct ibv_mr *cw_mr = ibv_reg_mr(L.pd, coef_words, OFDM_NK * 64, IBV_ACCESS_LOCAL_WRITE);
-    if (!rx_mr || !tx_mr || !c_mr || !cw_mr) rl_die("ibv_reg_mr");
+    if (!rx_mr || !tx_mr || !c_mr) rl_die("ibv_reg_mr");
 
     start_threads();
 
     rl_connect(&L, O.params, (uint64_t)(uintptr_t)rxr, rx_mr->rkey, 2, 0x100);
     struct ibv_qp *qp = L.qp;
     #define POST(wr) do { struct ibv_send_wr *bad; if (ibv_post_send(qp, &(wr), &bad)) rl_die("ibv_post_send"); } while (0)
-    struct ibv_sge sg_ctl = {.addr = (uintptr_t)ctl, .length = 24, .lkey = c_mr->lkey};
+    struct ibv_sge sg_ctl = {.addr = (uintptr_t)ctl, .length = 16, .lkey = c_mr->lkey};
     struct ibv_sge sg_st = {.addr = (uintptr_t)sts, .length = 64, .lkey = c_mr->lkey};
     struct ibv_send_wr w_ctl = {.wr_id = 3, .sg_list = &sg_ctl, .num_sge = 1, .opcode = IBV_WR_RDMA_WRITE,
                                 .send_flags = IBV_SEND_SIGNALED | IBV_SEND_INLINE};
@@ -753,26 +656,19 @@ int main(int argc, char **argv)
 
     /* reset, prefill the FPGA ring with the first frames, switch on */
     const uint64_t tx_ring = rl_status(&L, sts, c_mr->lkey);
-    printf("FPGA TX ring %lu KB%s\n", (unsigned long)(tx_ring >> 10), rl_modulator ? ", modulator" : "");
-    if (O.fpga_tx && !rl_modulator) { fprintf(stderr, "--fpga-tx: this bitstream has no modulator\n"); return 1; }
-    if (O.fpga_rx && !rl_demodulator) { fprintf(stderr, "--fpga-rx: this bitstream has no demodulator\n"); return 1; }
-    /* FPGA ring bytes per write and per frame; the host source of a write and its length */
-    const uint64_t UNIT = O.fpga_tx ? SLOT_B : PIECE, FR_B = O.fpga_tx ? SLOT_B : FRAME_B;
-    const int RBITS = O.fpga_tx ? 47 : 38;
-    #define TX_SRC(wp) ((uintptr_t)txr + (O.fpga_tx ? ((wp) / SLOT_B % NTX) * SLOT_B : (wp) % ((size_t)NTX * FRAME_B)))
-    #define TX_LEN     (O.fpga_tx ? (uint32_t)FB : PIECE)
-    ctl[0] = 4; ctl[1] = 0; ctl[2] = 0; POST(w_ctl);
+    printf("FPGA TX ring %lu KB\n", (unsigned long)(tx_ring >> 10));
+    ctl[0] = 4; ctl[1] = 0; POST(w_ctl);
     uint64_t wptr = 0;
-    for (; wptr < tx_ring; wptr += UNIT) {
-        uint64_t f = wptr / FR_B;
+    for (; wptr < tx_ring; wptr += PIECE) {
+        uint64_t f = wptr / FRAME_B;
         while (atomic_load_explicit(&tx_ready[f % NTX], memory_order_acquire) != f + 1) _mm_pause();
-        struct ibv_sge sg = {.addr = TX_SRC(wptr), .length = TX_LEN, .lkey = tx_mr->lkey};
-        struct ibv_send_wr w = {.wr_id = 2 | ((wptr + UNIT) << 8), .sg_list = &sg, .num_sge = 1,
+        struct ibv_sge sg = {.addr = (uintptr_t)txr + wptr % ((size_t)NTX * FRAME_B), .length = PIECE, .lkey = tx_mr->lkey};
+        struct ibv_send_wr w = {.wr_id = 2 | ((wptr + PIECE) << 8), .sg_list = &sg, .num_sge = 1,
                                 .opcode = IBV_WR_RDMA_WRITE, .send_flags = IBV_SEND_SIGNALED};
         w.wr.rdma.remote_addr = RL_WIN + wptr % tx_ring; w.wr.rdma.rkey = RL_WIN_RKEY;
         POST(w);
     }
-    ctl[0] = 3 | (O.fpga_tx ? 8 | (uint64_t)(O.m / 2 - 1) << 8 : 0); ctl[1] = wptr; POST(w_ctl);
+    ctl[0] = 3; ctl[1] = wptr; POST(w_ctl);
     t_start = rl_now();
     pthread_create(&chk, NULL, checker, &chk_cpu);
 
@@ -787,38 +683,28 @@ int main(int argc, char **argv)
         if (tl - t_loop > gap_max) gap_max = tl - t_loop;
         t_loop = tl;
         if (!stat_pending) { POST(w_st); stat_pending = 1; }
-        if (atomic_load_explicit(&dem_req, memory_order_acquire) == 1) {
-            /* --fpga-rx: the coefficients, then the gain, window and the switch (in order on the QP) */
-            struct ibv_sge sg = {.addr = (uintptr_t)coef_words, .length = OFDM_NK * 64, .lkey = cw_mr->lkey};
-            struct ibv_send_wr w = {.wr_id = 5, .sg_list = &sg, .num_sge = 1, .opcode = IBV_WR_RDMA_WRITE,
-                                    .send_flags = IBV_SEND_SIGNALED};
-            w.wr.rdma.remote_addr = RL_COEF_ADDR; w.wr.rdma.rkey = RL_WIN_RKEY;
-            POST(w);
-            ctl[0] |= 16 | (uint64_t)dem_qneg << 5; ctl[2] = dem_ctl2; POST(w_ctl);
-            atomic_store(&dem_req, 2);
-        }
         /* the FPGA read pointer keeps time (it plays zeros for words not written): when it has
            passed the write pointer, skip ahead of it; the frames in between are lost, the frame
            grid stays */
         if ((int64_t)(wptr - rptr) < 0) {
-            wptr = (rptr + (256u << 10) + UNIT - 1) & ~(uint64_t)(UNIT - 1);
+            wptr = (rptr + (256u << 10) + PIECE - 1) & ~(uint64_t)(PIECE - 1);
             tx_skip++;
             /* frames before the new one are not needed; the slots of the frames still in flight
                (at most the FPGA ring's, 16 of 2 MB) stay untouched */
-            uint64_t fn = wptr / FR_B, keep = tx_ring / FR_B + 8;
+            uint64_t fn = wptr / FRAME_B, keep = tx_ring / FRAME_B + 8;
             atomic_store_explicit(&tx_need, fn, memory_order_relaxed);
             if (fn + keep > NTX && fn + keep - NTX > atomic_load(&tx_done))
                 atomic_store_explicit(&tx_done, fn + keep - NTX, memory_order_release);
         }
-        if ((int64_t)(wptr + UNIT - rptr) <= (int64_t)tx_ring) {
-            uint64_t f = wptr / FR_B;
+        if ((int64_t)(wptr + PIECE - rptr) <= (int64_t)tx_ring) {
+            uint64_t f = wptr / FRAME_B;
             if (atomic_load_explicit(&tx_ready[f % NTX], memory_order_acquire) == f + 1) {
-                struct ibv_sge sg = {.addr = TX_SRC(wptr), .length = TX_LEN, .lkey = tx_mr->lkey};
-                struct ibv_send_wr w = {.wr_id = 2 | ((wptr + UNIT) << 8), .sg_list = &sg, .num_sge = 1,
+                struct ibv_sge sg = {.addr = (uintptr_t)txr + wptr % ((size_t)NTX * FRAME_B), .length = PIECE, .lkey = tx_mr->lkey};
+                struct ibv_send_wr w = {.wr_id = 2 | ((wptr + PIECE) << 8), .sg_list = &sg, .num_sge = 1,
                                         .opcode = IBV_WR_RDMA_WRITE, .send_flags = IBV_SEND_SIGNALED};
                 w.wr.rdma.remote_addr = RL_WIN + wptr % tx_ring; w.wr.rdma.rkey = RL_WIN_RKEY;
                 POST(w);
-                wptr += UNIT;
+                wptr += PIECE;
                 ctl[1] = wptr; POST(w_ctl);     /* inline: the value is copied now */
             } else
                 tx_stall++;
@@ -831,17 +717,12 @@ int main(int argc, char **argv)
                 exit(1);
             }
             if (wc[i].wr_id == 1) {
-                rptr = rl_rptr64_bits(sts[0], wptr, RBITS);
+                rptr = rl_rptr64(sts[0], wptr);
                 stat_pending = 0;
                 atomic_store_explicit(&rx_over_seen, (uint32_t)sts[4], memory_order_relaxed);
-                atomic_store_explicit(&rx_t0, (uint32_t)(sts[4] >> 32), memory_order_relaxed);
-                if (atomic_load(&dem_req) == 2 && (uint32_t)(sts[3] >> 32) != 0xFFFFFFFFu) {
-                    atomic_store(&dem_chunk, sts[3] >> 32);
-                    atomic_store(&dem_req, 3);
-                }
             }
             else if ((wc[i].wr_id & 0xFF) == 2) {
-                uint64_t d = (wc[i].wr_id >> 8) / FR_B;
+                uint64_t d = (wc[i].wr_id >> 8) / FRAME_B;
                 if (d > atomic_load_explicit(&tx_done, memory_order_relaxed))
                     atomic_store_explicit(&tx_done, d, memory_order_release);
             }
@@ -863,7 +744,7 @@ int main(int argc, char **argv)
         if (n) atomic_store_explicit(&rx_chunks, rx_n, memory_order_release);
         double t = rl_now();
         if (t - tlast >= 1.0) {
-            print_stats(t - t0, t - tlast, (double)(wptr - l_tx), (double)(rx_n - l_rx) * RL_CHUNK, sts[1] & 0xFFFFFFFF, sts[4] & 0xFFFFFFFF);
+            print_stats(t - t0, t - tlast, (double)(wptr - l_tx), (double)(rx_n - l_rx) * RL_CHUNK, sts[1], sts[4]);
             if (getenv("ENGINE_STATS")) printf("      engine: longest loop gap %.0f us, TX skips %lu, stalls %lu\n", gap_max * 1e6, (unsigned long)tx_skip, (unsigned long)tx_stall);
             gap_max = 0;
             if (gaps) printf("      RX gaps %" PRIu64 "\n", gaps);
@@ -884,6 +765,6 @@ int main(int argc, char **argv)
            ", RX overflow %" PRIu64 "\n",
            wptr / 1e9, rx_n * (double)RL_CHUNK / 1e9, gaps, tx_stall, tx_skip, (uint64_t)st_frames, (uint64_t)st_bit_err,
            (uint64_t)st_bits, st_bits ? (double)st_bit_err / st_bits : 0.0, (uint64_t)st_bad_hdr,
-           (uint64_t)st_seq_err, (uint64_t)st_late, (uint64_t)st_missing, (uint64_t)st_relock, (uint64_t)st_shift, (uint64_t)st_vframes, (uint64_t)st_vintact, sts[1] & 0xFFFFFFFF, sts[4] & 0xFFFFFFFF);
+           (uint64_t)st_seq_err, (uint64_t)st_late, (uint64_t)st_missing, (uint64_t)st_relock, (uint64_t)st_shift, (uint64_t)st_vframes, (uint64_t)st_vintact, sts[1], sts[4]);
     return 0;
 }
