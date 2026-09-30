@@ -132,7 +132,7 @@ localparam [31:0] CTL_OFF = 32'h0028_0000;
 
 // ======================================================================== memories
 (* ram_style = "block" *) reg [511:0] tx_mem [0:TX_WORDS-1];
-(* ram_style = "block" *) reg [511:0] rx_mem [0:RXW-1];
+// RX ring: UltraRAM in the clk domain (below), written through an asynchronous FIFO
 
 // ======================================================================== control (clk)
 reg         ctl_tx = 1'b0, ctl_rx = 1'b0, ctl_clr = 1'b0, ctl_mod = 1'b0;
@@ -230,11 +230,10 @@ end
 // ======================================================================== clock crossings
 // RF -> clk: word counters that step by one (Gray)
 wire [31:0] tx_rd_rf, rx_wr_rf;                  // RF domain counters (words)
-wire [31:0] tx_rd_s, rx_wr_s;                    // synchronized to clk
+wire [31:0] tx_rd_s;                             // synchronized to clk
 xpm_cdc_gray #(.WIDTH(32), .DEST_SYNC_FF(3)) cdc_txrd (
     .src_clk(clk_rf), .src_in_bin(tx_rd_rf), .dest_clk(clk), .dest_out_bin(tx_rd_s));
-xpm_cdc_gray #(.WIDTH(32), .DEST_SYNC_FF(3)) cdc_rxwr (
-    .src_clk(clk_rf), .src_in_bin(rx_wr_rf), .dest_clk(clk), .dest_out_bin(rx_wr_s));
+
 
 // clk -> RF: values that jump (handshake, re-sent whenever the previous one is through)
 reg  [31:0] tx_wr_w = 32'd0, rx_free_w = 32'd0;  // TX words written by the host, RX words freed
@@ -330,6 +329,36 @@ xpm_cdc_gray #(.WIDTH(32), .DEST_SYNC_FF(3)) cdc_modq (
 xpm_cdc_gray #(.WIDTH(32), .DEST_SYNC_FF(3)) cdc_modu (
     .src_clk(clk_rf), .src_in_bin(mod_under), .dest_clk(clk), .dest_out_bin(mod_under_s));
 
+// ======================================================================== RX ring (UltraRAM, clk)
+// the packer's words (address, data) cross in a small FIFO (clk drains 200 M/s, the packer fills
+// 125 M/s); rx_wr_c counts the words in the ring, so the chunk doorbells follow the ring itself
+wire [RXA+511:0] rxf_dout;
+wire             rxf_empty;
+reg  [31:0]      rx_wr_c = 32'd0;
+wire [511:0]     rxr_dout;
+wire [RXA-1:0]   rxr_raddr;
+xpm_fifo_async #(
+    .FIFO_MEMORY_TYPE("distributed"), .FIFO_WRITE_DEPTH(16), .WRITE_DATA_WIDTH(RXA + 512),
+    .READ_DATA_WIDTH(RXA + 512), .READ_MODE("fwft"), .FIFO_READ_LATENCY(0), .CDC_SYNC_STAGES(3),
+    .RELATED_CLOCKS(0), .USE_ADV_FEATURES("0000"), .ECC_MODE("no_ecc"), .FULL_RESET_VALUE(0),
+    .DOUT_RESET_VALUE("0"), .WAKEUP_TIME(0), .SIM_ASSERT_CHK(0)
+) rx_cdc_fifo (
+    .rst(rst_rf), .wr_clk(clk_rf), .wr_en(w2_e), .din({w2_a, w2_d}), .full(), .overflow(),
+    .rd_clk(clk), .rd_en(!rxf_empty), .dout(rxf_dout), .empty(rxf_empty), .underflow(),
+    .prog_full(), .wr_data_count(), .prog_empty(), .rd_data_count(), .almost_full(), .almost_empty(),
+    .wr_ack(), .data_valid(), .rd_rst_busy(), .wr_rst_busy(), .sleep(1'b0),
+    .injectsbiterr(1'b0), .injectdbiterr(1'b0), .sbiterr(), .dbiterr());
+xpm_memory_sdpram #(
+    .MEMORY_SIZE(RXW * 512), .MEMORY_PRIMITIVE("ultra"), .CLOCKING_MODE("common_clock"),
+    .MEMORY_INIT_FILE("none"), .USE_MEM_INIT(0), .ECC_MODE("no_ecc"), .AUTO_SLEEP_TIME(0),
+    .WRITE_DATA_WIDTH_A(512), .BYTE_WRITE_WIDTH_A(512), .ADDR_WIDTH_A(RXA),
+    .READ_DATA_WIDTH_B(512), .ADDR_WIDTH_B(RXA), .READ_LATENCY_B(2), .WRITE_MODE_B("read_first"),
+    .READ_RESET_VALUE_B("0")
+) rx_ring (
+    .clka(clk), .ena(1'b1), .wea(!rxf_empty), .addra(rxf_dout[RXA+511:512]), .dina(rxf_dout[511:0]),
+    .clkb(clk), .rstb(1'b0), .enb(1'b1), .regceb(1'b1), .addrb(rxr_raddr), .doutb(rxr_dout),
+    .sleep(1'b0), .injectsbiterra(1'b0), .injectdbiterra(1'b0), .sbiterrb(), .dbiterrb());
+
 // ======================================================================== RX packer (clk_rf)
 // ring chunk of the run's first chunk: quasi static (changes on reset, long before RX is on)
 wire [RCB-1:0] rx_off;
@@ -372,8 +401,7 @@ always @(posedge clk_rf) begin
             end
         end
     end
-    if (w2_e)
-        rx_mem[w2_a] <= w2_d;
+
     if (!rx_on_rf)
         rx_wa <= {rx_off_rf, {CHB{1'b0}}};         // settled long before RX goes on
     if (rst_rf || clr_rf) begin
@@ -402,7 +430,8 @@ function [15:0] db_value(input [31:0] v);
 endfunction
 
 always @(posedge clk) begin
-    chunks_ready <= rx_wr_s >> CHB;
+    if (!rxf_empty) rx_wr_c <= rx_wr_c + 1'b1;
+    chunks_ready <= rx_wr_c >> CHB;
     if (cq_db_valid && cq_db_addr == CQ_DB_ADDR)
         chunks_done <= chunks_done + cq_db_cnt;
     rx_free_w <= chunks_done << CHB;
@@ -417,6 +446,7 @@ always @(posedge clk) begin
         chunks_rung <= chunks_ready;
     end
     if (rst || ctl_clr) begin
+        rx_wr_c <= 32'd0;
         chunks_done <= 32'd0; chunks_rung <= 32'd0; n_sq <= 32'd0; sq_pidb_valid <= 1'b0;
         rx_free_w <= 32'd0;
         // the next run starts where ERNIC is: after the last producer index it accepted
@@ -445,8 +475,9 @@ reg [31:0] r_addr = 32'd0;
 reg [2:0]  r_size = 3'd0;
 reg [7:0]  r_left = 8'd0;
 reg [1:0]  p_v = 2'b00, p_last = 2'b00, p_stat = 2'b00, p_id = 2'b00;
-reg [511:0] rq1 = 512'd0, rq2 = 512'd0;
+
 wire [31:0] r_off = r_addr - BASE;
+assign rxr_raddr = r_off[RXA+5:6];                  // UltraRAM read, latency 2 (as the pipeline)
 
 // a 4-deep output queue absorbs the 2-cycle read pipeline when R stalls
 reg [512+2-1:0] oq [0:3];
@@ -466,8 +497,7 @@ always @(posedge clk) begin
     p_v <= {p_v[0], can_issue};
     p_last <= {p_last[0], r_left == 8'd0};
     p_stat <= {p_stat[0], r_off >= CTL_OFF};
-    rq1 <= rx_mem[r_off[RXA+5:6]];
-    rq2 <= rq1;
+
     if (can_issue) begin
         r_addr <= r_addr + (32'd1 << r_size);
         r_left <= r_left - 1'b1;
@@ -475,7 +505,7 @@ always @(posedge clk) begin
     end
     // output queue
     if (p_v[1]) begin
-        oq[oq_wr] <= {p_last[1], 1'b0, p_stat[1] ? status : rq2};
+        oq[oq_wr] <= {p_last[1], 1'b0, p_stat[1] ? status : rxr_dout};
         oq_wr <= oq_wr + 1'b1;
     end
     if (oq_pop) oq_rd <= oq_rd + 1'b1;

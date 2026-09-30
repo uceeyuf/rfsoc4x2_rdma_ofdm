@@ -53,6 +53,17 @@ task wr_burst(input [31:0] a, input integer n0, input integer beats, input integ
   wvalid <= 0; wlast <= 0;
  end endtask
 
+// one word through port b
+task rd1(input [31:0] a, output [511:0] d);
+ begin
+  @(posedge clk); araddr <= a; arlen <= 0; arvalid <= 1;
+  @(posedge clk); while (!arready) @(posedge clk); arvalid <= 0;
+  while (!(rvalid && rready)) @(posedge clk);
+  d = rdata;
+  @(posedge clk);
+ end endtask
+reg [511:0] w0, w2;
+
 // ---- DAC check: every non-zero DAC beat must be the next half of the TX words, in order
 integer tx_seen = 0, tx_bad = 0, half = 0;
 reg [511:0] tw;
@@ -126,9 +137,10 @@ initial begin
            dut.sq_base, dut.rx_off_rf, dut.chunks_ready, n_db, last_db, SQD);
   if (last_db != (dut.sq_base + dut.chunks_ready) % SQD) fails = fails + 1;
   // run 2's first chunk is ring chunk sq_base mod RXC, the next ones follow in time
-  $display("ring chunk %0d word 0: %h, chunk %0d word 0: %h", dut.sq_base % RXC, dut.rx_mem[(dut.sq_base % RXC) * CHW][31:0],
-           (dut.sq_base + 2) % RXC, dut.rx_mem[((dut.sq_base + 2) % RXC) * CHW][31:0]);
-  if (dut.rx_mem[((dut.sq_base + 2) % RXC) * CHW][31:0] !== dut.rx_mem[(dut.sq_base % RXC) * CHW][31:0] + 4 * CHW) fails = fails + 1;
+  rd1(BASE + RX_OFF + (dut.sq_base % RXC) * CHW * 64, w0);
+  rd1(BASE + RX_OFF + ((dut.sq_base + 2) % RXC) * CHW * 64, w2);
+  $display("ring chunk %0d word 0: %h, chunk %0d word 0: %h", dut.sq_base % RXC, w0[31:0], (dut.sq_base + 2) % RXC, w2[31:0]);
+  if (w2[31:0] !== w0[31:0] + 4 * CHW) fails = fails + 1;
   if (fails) $display("FAIL (%0d checks)", fails); else $display("PASS");
   $finish;
 end
