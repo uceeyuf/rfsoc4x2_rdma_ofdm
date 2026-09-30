@@ -9,3 +9,4 @@ host/rf_stream_host
 host/rf_ofdm
 *.ready
 stream_params.txt
+host/ofdm_plots

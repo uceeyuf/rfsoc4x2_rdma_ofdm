@@ -14,6 +14,8 @@
  *   rf_ofdm [--m 4] [--rms 0.18] [--seconds 10] [--tx-threads 3] [--rx-threads 12]
  *           [--video WxH | --yuv FILE --size WxH] [--vframes 30]
  *           [--save FILE --save-frames N --save-every K (every K-th received video frame)]
+ *           [--dump FILE --dump-frames K (raw ADC samples of K frames after the first lock, for
+ *            host/ofdm_plots: spectrum and constellation)]
  *           [--dev NAME] [--params FILE] [--sim 1]
  *
  * --sim 1: no board; the TX stream comes back delayed by 12344 samples with Q inverted (as ADC_D),
@@ -50,11 +52,11 @@
 #define HDR         8                               /* magic, sequence number */
 
 static struct {
-    const char *dev, *params, *yuv, *save;
-    int m, tx_threads, rx_threads, w, h, vframes, save_frames, save_every, sim, sim_free, sim_slip;
+    const char *dev, *params, *yuv, *save, *dump;
+    int m, tx_threads, rx_threads, w, h, vframes, save_frames, save_every, dump_frames, sim, sim_free, sim_slip;
     double rms, seconds;
 } O = {.params = "stream_params.txt", .m = 4, .tx_threads = 3, .rx_threads = 12, .w = 1280, .h = 720,
-       .vframes = 30, .save_every = 1, .rms = 0.18, .seconds = 10};
+       .vframes = 30, .save_every = 1, .dump_frames = 64, .rms = 0.18, .seconds = 10};
 
 static int FB, PL;                          /* payload bytes per OFDM frame (with header), video bytes */
 static size_t VF, VB;                       /* bytes per video frame, per video loop */
@@ -248,6 +250,35 @@ out:
 }
 
 /* ------------------------------------------------------------------ acquisition and checker */
+/* raw samples of O.dump_frames frames from lk->jstart on, in the stream memory format, after a
+   header: "OFDMDUMP", m, p (first training body, in samples from the start of the data), Q sign,
+   frames, samples per frame */
+static void dump_frames(const struct lock *lk)
+{
+    int64_t s0 = lk->S0 + lk->jstart * OFDM_FRAME, b = (s0 - 256) & ~(int64_t)7;
+    size_t bytes = (size_t)O.dump_frames * FRAME_B + 4096;
+    if (bytes > RING_B / 2) { fprintf(stderr, "dump: at most %zu frames\n", RING_B / 2 / FRAME_B); return; }
+    while ((int64_t)atomic_load(&rx_chunks) * CH_SAMP < b + (int64_t)(bytes / 4))
+        if (atomic_load(&stop)) return; else usleep(100);
+    uint8_t *buf = malloc(bytes);
+    memcpy(buf, rxr + (rx_slot0 * RL_CHUNK + (size_t)b * 4) % RING_B, bytes);
+    if (atomic_load(&rx_chunks) - (uint64_t)(b / CH_SAMP) >= RL_SLOTS - 1) {
+        fprintf(stderr, "dump: overwritten while copied\n");
+        free(buf);
+        return;
+    }
+    FILE *f = fopen(O.dump, "wb");
+    if (f) {
+        int32_t h[6] = {O.m, (int32_t)(s0 - b), lk->q_sign, O.dump_frames, OFDM_FRAME, 0};
+        fwrite("OFDMDUMP", 1, 8, f);
+        fwrite(h, sizeof(h), 1, f);
+        fwrite(buf, 1, bytes, f);
+        fclose(f);
+        printf("dump: %d frames of raw samples to %s\n", O.dump_frames, O.dump);
+    }
+    free(buf);
+}
+
 /* frame search on the 4 latest complete chunks (2 frames); fills *lk, returns 0 when found */
 static int acquire(ofdm_ctx *c, int16_t *ci, int16_t *cq, struct lock *lk)
 {
@@ -328,6 +359,7 @@ static void *checker(void *arg)
             atomic_store_explicit(&lock_gen, g, memory_order_release);
             seq0 = -1;
             bad_run = 0;
+            if (g == 1 && O.dump) dump_frames(&lk);
         }
         /* wait for frame j; give up on it when the stream is well past it (a worker dropped it) */
         struct lock *lk = &locks[g % 4];
@@ -572,6 +604,8 @@ int main(int argc, char **argv)
         else if (!strcmp(k, "--save")) O.save = v;
         else if (!strcmp(k, "--save-frames")) O.save_frames = atoi(v);
         else if (!strcmp(k, "--save-every")) O.save_every = atoi(v) > 0 ? atoi(v) : 1;
+        else if (!strcmp(k, "--dump")) O.dump = v;
+        else if (!strcmp(k, "--dump-frames")) O.dump_frames = atoi(v);
         else if (!strcmp(k, "--dev")) O.dev = v;
         else if (!strcmp(k, "--params")) O.params = v;
         else if (!strcmp(k, "--sim")) O.sim = atoi(v);

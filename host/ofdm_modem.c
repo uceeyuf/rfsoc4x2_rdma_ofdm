@@ -473,7 +473,7 @@ static inline int slice(float v, int h, float s)
    (mem: per 16 int16 8 I then 8 Q; no wrap) */
 static inline __attribute__((always_inline)) int
 demod_stream_core(ofdm_ctx *c, int m, const int16_t *ci, const int16_t *cq, const int16_t *mem, int p,
-                  int q_sign, uint8_t *out)
+                  int q_sign, uint8_t *out, float *sym)
 {
     int start = p - CP - BACKOFF;
     if (start < 0 && !mem)
@@ -545,6 +545,10 @@ demod_stream_core(ofdm_ctx *c, int m, const int16_t *ci, const int16_t *cq, cons
         cf rot = mag > 0 ? conjf(acc) / mag : 1.0f;
         for (int i = 0; i < n_data; i++) {
             cf v = x[kidx(data_k[i])] * rot;
+            if (sym) {
+                sym[2 * (s * n_data + i)] = crealf(v) * sc;
+                sym[2 * (s * n_data + i) + 1] = cimagf(v) * sc;
+            }
             acc64 |= (uint64_t)(rv[slice(crealf(v), h, sc)] | (rv[slice(cimagf(v), h, sc)] << h)) << nacc;
             nacc += 2 * h;
             if (nacc >= 32) {
@@ -563,14 +567,22 @@ demod_stream_core(ofdm_ctx *c, int m, const int16_t *ci, const int16_t *cq, cons
 int ofdm_demod_stream(ofdm_ctx *c, int m, const int16_t *ci, const int16_t *cq, int p, int q_sign,
                       uint8_t *out)
 {
-    return demod_stream_core(c, m, ci, cq, NULL, p, q_sign, out);
+    return demod_stream_core(c, m, ci, cq, NULL, p, q_sign, out, NULL);
 }
 
 int ofdm_demod_stream_mem(ofdm_ctx *c, int m, const int16_t *mem, int p, int q_sign, uint8_t *out)
 {
     if (p < CP + BACKOFF)
         return -1;
-    return demod_stream_core(c, m, NULL, NULL, mem, p, q_sign, out);
+    return demod_stream_core(c, m, NULL, NULL, mem, p, q_sign, out, NULL);
+}
+
+int ofdm_symbols_mem(ofdm_ctx *c, int m, const int16_t *mem, int p, int q_sign, uint8_t *out, float *sym)
+{
+    if (p < CP + BACKOFF)
+        return -1;
+    demod_stream_core(c, m, NULL, NULL, mem, p, q_sign, out, sym);
+    return N_DATA_SYM * n_data;
 }
 
 /* ---------------------------------------------------------------- streaming transmitter */

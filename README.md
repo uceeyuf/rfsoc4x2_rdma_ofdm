@@ -61,6 +61,7 @@ Host: Core Ultra 7 265K (8 P + 12 E cores), Mellanox ConnectX-4 (PCIe 3.0 x16), 
 | Streaming (`rf_stream_host`, tone), 10 s | 64.00 Gbit/s to the DACs and 64.00 Gbit/s from the ADCs, 0 RX gaps, 0 TX underflows, 0 RX overflows |
 | OFDM 16-QAM, raw 720p, 60 s | 61035 OFDM frames/s (2.0 GSPS), 5.29 Gb/s, 3.66 M OFDM frames, 58 / 59 s without errors, 28551 of 28660 video frames byte-exact, BER 3.1 × 10⁻⁵ (all from one RX overflow), 0 TX underflows ([log](./docs/results/ofdm_stream_16qam_720p_60s_log.txt)) |
 | OFDM 64-QAM, raw 1080p, 60 s | 7.94 Gb/s, per-second BER median 2.3 × 10⁻⁷, 18621 of 19120 video frames byte-exact, BER 2.0 × 10⁻⁴ (mostly one RX stall) ([log](./docs/results/ofdm_stream_64qam_1080p_60s_log.txt)) |
+| OFDM 256-QAM, 20 s (`--tx-threads 4`) | 10.58 Gb/s, BER 1.8 × 10⁻⁴ in every second (the SNR limit; a payload this size needs FEC), 0 TX underflows, 0 relocks ([log](./docs/results/ofdm_stream_256qam_20s_log.txt)) |
 | OFDM from the A53 (buffer mode, MTS) | 16-QAM 5.29 Gb/s 0 errors (EVM −27.4 dB), 64-QAM 7.94 Gb/s BER 4 × 10⁻⁴, 256-QAM 10.59 Gb/s BER 6 × 10⁻³ ([log](./docs/results/ofdm_2gsps_board_log.txt)) |
 | MTS | DAC_B / ADC_D vs DAC_A / ADC_B after sync: +0.012 … +0.014 samples (6 … 7 ps) ([log](./docs/results/mts_2gsps_board_log.txt)) |
 | Timing | all constraints met, WNS +0.098 ns, 81 % of the BRAM ([report](./docs/results/rdma_ofdm_timing_summary.rpt), [utilisation](./docs/results/rdma_ofdm_utilization.rpt)) |
@@ -71,6 +72,30 @@ Host: Core Ultra 7 265K (8 P + 12 E cores), Mellanox ConnectX-4 (PCIe 3.0 x16), 
 * What is left is the rare pause longer than the 512 KB FPGA RX ring (65 µs): an RX overflow, after which the grid shift is exact.
 
 A CPU package that reaches TjMax (105 °C) throttles, and each throttle event is such a pause. Keep the host cool, and keep sysfs reads (MSRs) off the RDMA engine's thread.
+
+　
+
+## Spectrum and constellation
+
+Taken from 64 frames of raw ADC samples of a running link (`rf_ofdm --dump`), processed by `host/ofdm_plots` and drawn by `host/plot_ofdm.py`.
+* **Left**: the received PSD (blue) against the modulator's own output at the same digital level (grey).
+  * Welch estimate: 2048-point FFT, Hann window, 0.98 MHz bins.
+  * The analogue path costs about 8 dB, and the band (±898 MHz, 890 sub-carriers) stays flat within about ±1 dB.
+  * The empty sub-carriers around DC (±31 MHz) and the guard bands above ±898 MHz show the noise floor near −77 dBFS.
+* **Right**: every data sub-carrier symbol after the widely linear equaliser and the pilot phase correction, as a density plot, with the ideal points.
+  * EVM is −30.6 / −30.5 / −30.3 dB for 16 / 64 / 256-QAM: the link is limited by its SNR, not by the modulation.
+
+| ![16-QAM](./docs/img/ofdm_16qam.png) |
+| :----------------------------------: |
+| **Figure3** : 16-QAM, EVM −30.6 dB |
+
+| ![64-QAM](./docs/img/ofdm_64qam.png) |
+| :----------------------------------: |
+| **Figure4** : 64-QAM, EVM −30.5 dB |
+
+| ![256-QAM](./docs/img/ofdm_256qam.png) |
+| :------------------------------------: |
+| **Figure5** : 256-QAM, EVM −30.3 dB |
 
 　
 
@@ -95,6 +120,9 @@ tests/stream_up.sh 1 host/rf_stream_host --seconds 10 --tx tone:100  # program, 
 tests/stream_up.sh 0 host/rf_ofdm --seconds 60 --save build/rx.yuv --save-frames 120 --save-every 225
 tests/stream_up.sh 0 host/rf_ofdm --m 6 --video 1920x1080 --seconds 60
 python3 host/make_gif.py build/rx.yuv 1280x720 docs/img/ofdm_720p.gif
+tests/stream_up.sh 0 host/rf_ofdm --m 4 --seconds 4 --dump build/rx_m4.dump     # raw samples of 64 frames
+host/ofdm_plots build/rx_m4.dump build/plot_m4                                  # EVM, spectrum, symbols
+python3 host/plot_ofdm.py build/plot_m4 docs/img/ofdm_16qam.png
 ```
 
 * `tests/stream_up.sh 1` loads the bitstream and the A53 application over JTAG, then sends key `m` (MTS) over the UART.
@@ -119,6 +147,7 @@ python3 host/make_gif.py build/rx.yuv 1280x720 docs/img/ofdm_720p.gif
 | `host/rf_stream_host.c` | streaming test (tone), with READ / WRITE latency statistics (`LAT=1`) |
 | `host/rdma_link.c` | RC QP to ERNIC, clean stop |
 | `host/ofdm_modem.c`, `ofdm_bench.c` | OFDM modem and its benchmark |
+| `host/ofdm_plots.c`, `plot_ofdm.py` | spectrum, constellation and EVM from a raw sample dump |
 | `sw/src` | A53 application (clocks, RF tiles, MTS, buffer-mode OFDM) |
 | `tests/stream_config.tcl`, `stream_up.sh`, `host_tune.sh` | ERNIC configuration over JTAG, bring-up, host tuning |
 
@@ -200,6 +229,7 @@ Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 
 | 流测试（单音）10 s | 双向 64.00 Gbit/s，0 RX gap，0 TX underflow，0 RX overflow |
 | OFDM 16-QAM，原始 720p，60 s | 每秒 61035 个 OFDM 帧（2.0 GSPS），5.29 Gb/s，58/59 秒无误码，28660 帧视频中 28551 帧逐字节正确，BER 3.1 × 10⁻⁵（全部来自一次 RX 溢出），0 TX underflow |
 | OFDM 64-QAM，原始 1080p，60 s | 7.94 Gb/s，每秒 BER 中位数 2.3 × 10⁻⁷，19120 帧中 18621 帧逐字节正确 |
+| OFDM 256-QAM，20 s（`--tx-threads 4`） | 10.58 Gb/s，每秒 BER 均为 1.8 × 10⁻⁴（SNR 所限，传视频需要 FEC），0 TX underflow，0 次重锁 |
 | A53 OFDM（缓冲模式，MTS） | 16-QAM 5.29 Gb/s 0 误码（EVM −27.4 dB），64-QAM 7.94 Gb/s BER 4 × 10⁻⁴，256-QAM 10.59 Gb/s BER 6 × 10⁻³ |
 | MTS | 同步后 DAC_B / ADC_D 相对 DAC_A / ADC_B：+0.012 … +0.014 样本（6 … 7 ps） |
 | 时序 | 全部满足，WNS +0.098 ns，BRAM 81 % |
@@ -210,6 +240,16 @@ Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 
 * 剩下的是少数长于 FPGA 512 KB RX 环（65 µs）的停顿，表现为 RX overflow，之后网格可以精确平移。
 
 CPU 封装达到 TjMax（105 °C）时会热降频，每次降频就是一次这样的停顿，所以主机要做好散热，RDMA 引擎线程也不要读 sysfs（MSR）。
+
+## 频谱与星座图
+
+数据取自运行中链路的 64 帧原始 ADC 样本（`rf_ofdm --dump`），由 `host/ofdm_plots` 处理、`host/plot_ofdm.py` 绘制（见上文图 3–5）。
+* **左图**：接收 PSD（蓝）与相同数字电平下调制器输出（灰）的对比。
+  * Welch 估计：2048 点 FFT，Hann 窗，每格 0.98 MHz。
+  * 模拟链路损耗约 8 dB；带内（±898 MHz，890 个子载波）平坦度约 ±1 dB。
+  * DC 附近空载的子载波（±31 MHz）和 ±898 MHz 以外的保护带处，噪底约 −77 dBFS。
+* **右图**：宽线性均衡和导频相位校正之后的全部数据子载波符号密度图，叠加理想星座点。
+  * 16 / 64 / 256-QAM 的 EVM 分别为 −30.6 / −30.5 / −30.3 dB，说明链路受 SNR 限制，与调制阶数无关。
 
 构建与运行步骤见上文英文部分（建议 `isolcpus=4-7`，每次开机后运行 `sudo tests/host_tune.sh`）。
 

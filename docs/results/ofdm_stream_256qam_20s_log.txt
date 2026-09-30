@@ -1,0 +1,26 @@
+256-QAM, 21676 payload bytes per OFDM frame, 61035 frames/s = 10.58 Gbit/s of video;
+video 1280x720 yuv420p (1382400 bytes, 30 frames in the loop) = up to 957 video frames/s
+host: rocep2s0 QPN 205, RX ring 1024 x 64 KB at 0x7c7300e00000 (R_Key 0x17a291); waiting for build/stream_params.txt.ready
+FPGA TX ring 2048 KB
+  t   TX Gbit/s  RX Gbit/s  frames/s   BER        bad hdr  late  relock  video fps  TX underflow  RX overflow  CPU  throttle
+acquisition: frame found at sample 667 of chunk 1084, Q sign -1 lag +0
+  1       64.01      63.99     59529   1.78e-04       917     0       0      356.0             0            0   -1 C    -1
+  2       64.00      64.00     61035   1.87e-04      1878     0       0      351.0             0            0   -1 C    -1
+  3       64.00      64.00     61035   1.86e-04      2788     0       0      371.0             0            0   -1 C    -1
+  4       64.00      64.00     61035   1.88e-04      3777     0       0      332.0             0            0   -1 C    -1
+  5       64.00      64.00     61034   1.83e-04      4697     0       0      378.0             0            0   -1 C    -1
+  6       64.00      64.00     61035   1.84e-04      5647     0       0      371.0             0            0   -1 C    -1
+  7       64.00      64.00     61037   1.83e-04      6645     0       0      344.0             0            0   -1 C    -1
+  8       64.00      64.00     61034   1.83e-04      7637     0       0      336.0             0            0   -1 C    -1
+  9       64.00      64.00     61035   1.83e-04      8560     0       0      354.0             0            0   -1 C    -1
+ 10       64.00      64.00     61034   1.84e-04      9544     0       0      334.0             0            0   -1 C    -1
+ 11       64.00      64.00     61037   1.83e-04     10462     0       0      354.0             0            0   -1 C    -1
+ 12       64.00      64.00     61032   1.85e-04     11383     0       0      361.0             0            0   -1 C    -1
+ 13       64.00      64.00     61036   1.83e-04     12366     0       0      336.0             0            0   -1 C    -1
+ 14       64.00      64.00     61035   1.85e-04     13325     0       0      354.0             0            0   -1 C    -1
+ 15       64.00      64.00     61036   1.84e-04     14267     0       0      347.0             0            0   -1 C    -1
+ 16       64.00      64.00     61035   1.84e-04     15224     0       0      335.0             0            0   -1 C    -1
+ 17       64.00      64.00     61033   1.83e-04     16127     0       0      377.0             0            0   -1 C    -1
+ 18       64.00      64.00     61033   1.85e-04     17088     0       0      351.0             0            0   -1 C    -1
+ 19       64.00      64.00     61039   1.85e-04     18019     0       0      351.0             0            0   -1 C    -1
+total: TX 160.00 GB, RX 160.00 GB, 0 RX gaps, 0 TX stalls (frame not ready), 0 TX skips; 1219203 frames checked, 38877235 bit errors / 211419553824 (BER 1.84e-04), 18953 bad headers, 138686 sequence errors, 0 late, 0 missing, 0 relocks, 0 shifts, 7057 video frames (0 byte-exact); FPGA: TX underflow 0, RX overflow 0

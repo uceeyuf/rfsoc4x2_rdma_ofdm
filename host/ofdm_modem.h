@@ -53,6 +53,12 @@ int ofdm_demod_stream(ofdm_ctx *c, int bits_per_sym, const int16_t *ci, const in
 int ofdm_demod_stream_mem(ofdm_ctx *c, int bits_per_sym, const int16_t *mem, int p, int q_sign,
                           uint8_t *bits_out);
 
+/* ofdm_demod_stream_mem that also returns the data sub-carrier symbols after equalisation and
+   pilot phase correction, before the decision: OFDM_DATA_SYM x ofdm_data_carriers() (re, im)
+   pairs in sym, scaled to the QAM grid (points at odd integers); returns the number of symbols */
+int ofdm_symbols_mem(ofdm_ctx *c, int bits_per_sym, const int16_t *mem, int p, int q_sign, uint8_t *bits_out,
+                     float *sym);
+
 /* streaming transmitter: one frame (OFDM_FRAME samples) of the given payload bits (packed LSB
    first, ofdm_frame_bits() of them = a whole number of bytes; the buffer must be readable 8 bytes
    beyond) in the stream memory format, scaled by ofdm_stream_gain(); returns clipped values.
