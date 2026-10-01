@@ -71,25 +71,25 @@ A CPU package that reaches TjMax (105 °C) throttles, and each throttle event is
 
 ## Spectrum and constellation
 
-Taken from 64 frames of raw ADC samples of a running link (`rf_ofdm --dump`), processed by `host/ofdm_plots` and drawn by `host/plot_ofdm.py`.
-* **Left**: the received PSD (blue) against the modulator's own output at the same digital level (grey).
+Modem 2 on the board: the FPGA transmitter, 64 frames of raw ADC samples of the running link (`rf_ofdm --m2 1 --dump`), the host receiver of [zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm#modem-2-two-independent-ends) (fixed point, as planned for the FPGA), drawn by `host/plot_ofdm.py`.
+* **Left**: the received PSD (blue) against the transmitter's own output, its bit-exact model at the same digital level (grey).
   * Welch estimate: 2048-point FFT, Hann window, 0.98 MHz bins.
-  * The analogue path costs about 8 dB, and the band (±898 MHz, 890 sub-carriers) stays flat within about ±1 dB.
-  * The empty sub-carriers around DC (±31 MHz) and the guard bands above ±898 MHz show the noise floor near −77 dBFS.
-* **Right**: every data sub-carrier symbol after the widely linear equaliser and the pilot phase correction, as a density plot, with the ideal points.
-  * EVM is −30.6 / −30.5 / −30.3 dB for 16 / 64 / 256-QAM: the link is limited by its SNR, not by the modulation.
+  * Data on 62.5 … 898 MHz on both sides (804 data sub-carriers, 54 pilots); the RF pilot tone at +15.6 MHz.
+  * The analogue path costs about 7 dB, and the band stays flat within about ±1.5 dB; the noise floor near DC and above ±898 MHz is about −77 dBFS.
+* **Right**: every data sub-carrier symbol after the widely linear combiner and the per-symbol pilot phase, as a density plot, with the ideal points.
+  * EVM is −26.9 dB for 16, 64 and 256-QAM alike: the link is limited by its SNR, not by the modulation. BER 3.8 × 10⁻⁵ / 4.9 × 10⁻⁴ / 3.7 × 10⁻³.
 
-| ![16-QAM](./docs/img/ofdm_16qam.png) |
+| ![16-QAM](./docs/img/m2_16qam.png) |
+| :--------------------------------: |
+| **Figure2** : Modem 2, 16-QAM, EVM −26.9 dB |
+
+| ![64-QAM](./docs/img/m2_64qam.png) |
+| :--------------------------------: |
+| **Figure3** : Modem 2, 64-QAM, EVM −26.9 dB |
+
+| ![256-QAM](./docs/img/m2_256qam.png) |
 | :----------------------------------: |
-| **Figure2** : 16-QAM, EVM −30.6 dB |
-
-| ![64-QAM](./docs/img/ofdm_64qam.png) |
-| :----------------------------------: |
-| **Figure3** : 64-QAM, EVM −30.5 dB |
-
-| ![256-QAM](./docs/img/ofdm_256qam.png) |
-| :------------------------------------: |
-| **Figure4** : 256-QAM, EVM −30.3 dB |
+| **Figure4** : Modem 2, 256-QAM, EVM −26.9 dB |
 
 　
 
@@ -116,7 +116,7 @@ tests/stream_up.sh 0 host/rf_ofdm --m 6 --video 1920x1080 --seconds 60
 python3 host/make_gif.py build/rx.yuv 1280x720 build/rx_720p.gif
 tests/stream_up.sh 0 host/rf_ofdm --m 4 --seconds 4 --dump build/rx_m4.dump     # raw samples of 64 frames
 host/ofdm_plots build/rx_m4.dump build/plot_m4                                  # EVM, spectrum, symbols
-python3 host/plot_ofdm.py build/plot_m4 docs/img/ofdm_16qam.png
+python3 host/plot_ofdm.py build/plot_m4 build/ofdm_16qam.png
 ```
 
 * `tests/stream_up.sh 1` loads the bitstream and the A53 application over JTAG, then sends key `m` (MTS) over the UART.
@@ -235,13 +235,13 @@ CPU 封装达到 TjMax（105 °C）时会热降频，每次降频就是一次这
 
 ## 频谱与星座图
 
-数据取自运行中链路的 64 帧原始 ADC 样本（`rf_ofdm --dump`），由 `host/ofdm_plots` 处理、`host/plot_ofdm.py` 绘制（见上文图 2–4）。
-* **左图**：接收 PSD（蓝）与相同数字电平下调制器输出（灰）的对比。
+Modem 2 上板：FPGA 发射机，取运行中链路的 64 帧原始 ADC 样本（`rf_ofdm --m2 1 --dump`），由 [zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm#modem-2两端独立) 的主机接收机（按计划的 FPGA 实现做定点）处理，`host/plot_ofdm.py` 绘制（见上文图 2–4）。
+* **左图**：接收 PSD（蓝）与发射机自身输出（其位精确模型，相同数字电平，灰）的对比。
   * Welch 估计：2048 点 FFT，Hann 窗，每格 0.98 MHz。
-  * 模拟链路损耗约 8 dB；带内（±898 MHz，890 个子载波）平坦度约 ±1 dB。
-  * DC 附近空载的子载波（±31 MHz）和 ±898 MHz 以外的保护带处，噪底约 −77 dBFS。
-* **右图**：宽线性均衡和导频相位校正之后的全部数据子载波符号密度图，叠加理想星座点。
-  * 16 / 64 / 256-QAM 的 EVM 分别为 −30.6 / −30.5 / −30.3 dB，说明链路受 SNR 限制，与调制阶数无关。
+  * 数据在两侧 62.5 … 898 MHz（804 个数据子载波，54 个导频）；射频导频单音在 +15.6 MHz。
+  * 模拟链路损耗约 7 dB，带内平坦度约 ±1.5 dB；DC 附近和 ±898 MHz 以外噪底约 −77 dBFS。
+* **右图**：宽线性合并与逐符号导频相位校正之后的全部数据子载波符号密度图，叠加理想星座点。
+  * 16 / 64 / 256-QAM 的 EVM 都是 −26.9 dB，说明链路受 SNR 限制，与调制阶数无关。BER 3.8 × 10⁻⁵ / 4.9 × 10⁻⁴ / 3.7 × 10⁻³。
 
 构建与运行步骤见上文英文部分（建议 `isolcpus=4-7`，每次开机后运行 `sudo tests/host_tune.sh`）。
 
