@@ -7,23 +7,18 @@
 <span id="en">RFSoC 4x2: 2 GSPS OFDM with the host CPU as the modem, over 100G RDMA</span>
 ===========================
 
-Continuous I/Q streaming between a Linux host and the RF data converters of the RFSoC 4x2 (XCZU48DR), carried by RoCE v2 (AMD ERNIC) on the QSFP28 port: **64 Gbit/s to the DACs and 64 Gbit/s from the ADCs at the same time, i.e. 2.0 GSPS × I/Q × 16 bit each way.** The OFDM transmitter and receiver run in C on the host CPU. Through a loopback cable (DAC_A → ADC_B for I, DAC_B → ADC_D for Q, multi-tile synchronised) the link carries raw, uncompressed video:
+Continuous I/Q streaming between a Linux host and the RF data converters of the RFSoC 4x2 (XCZU48DR), carried by RoCE v2 (AMD ERNIC) on the QSFP28 port: **64 Gbit/s to the DACs and 64 Gbit/s from the ADCs at the same time, i.e. 2.0 GSPS × I/Q × 16 bit each way.** The OFDM transmitter and receiver run in C on the host CPU. Through a loopback cable (DAC_A → ADC_B for I, DAC_B → ADC_D for Q, multi-tile synchronised) the link carries raw, uncompressed video.
 
-* **16-QAM**: 5.29 Gb/s of payload, 720p at 478 frames/s. In 60 s, 58 of 59 seconds were free of bit errors (BER < 10⁻⁸), 99.6 % of the video frames were byte-exact, and the overall BER was 3 × 10⁻⁵.
-* **64-QAM**: 7.94 Gb/s of payload, 1080p at 319 frames/s. The median BER per second was 2 × 10⁻⁷ (the cable's SNR), and 97.4 % of the video frames were byte-exact.
+* **Modem 2** ([zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm#modem-2-two-independent-ends)): the transmitter in the FPGA modulates scrambled 720p video at 16-QAM (5.10 Gb/s); the host captures a burst of raw ADC samples and demodulates it offline. One 24.5 ms burst of 1497 OFDM frames holds 11 consecutive video frames, BER 4.1 × 10⁻⁵; every error falls on the four sub-carriers where the converters repeat the RF pilot at ± j fs / 8 (a known spur of this board).
 It combines [rfsoc4x2_ernic](https://github.com/uceeyuf/rfsoc4x2_ernic) (100G RDMA) with [rfsoc4x2_mts](https://github.com/uceeyuf/rfsoc4x2_mts) (multi-tile sync, I/Q OFDM), both ported to Vivado 2023.2 and the RF side to 2.0 GSPS.
 
 **The OFDM modem in the FPGA** (transmitter and receiver bit-exact with their C models, on this streaming core; 2 GSPS on the board, 4 GSPS in progress) continues in [zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm).
 
 　
 
-| ![video](./docs/img/ofdm_720p.gif) |
-| :--------------------------------: |
-| **Figure1** : 16-QAM, 720p: the video frame sent (left) and received (right), counters at that moment |
-
-| ![video](./docs/img/ofdm_1080p_64qam.gif) |
-| :---------------------------------------: |
-| **Figure2** : 64-QAM, 1080p |
+| ![video](./docs/img/m2_720p_burst.gif) |
+| :------------------------------------: |
+| **Figure1** : Modem 2, 16-QAM, 720p, one burst: the video frame sent (left) and received (right) |
 
 　
 
@@ -60,10 +55,8 @@ Host: Core Ultra 7 265K (8 P + 12 E cores), Mellanox ConnectX-4 (PCIe 3.0 x16), 
 | Test | Result |
 | :--- | :----- |
 | Streaming (`rf_stream_host`, tone), 10 s | 64.00 Gbit/s to the DACs and 64.00 Gbit/s from the ADCs, 0 RX gaps, 0 TX underflows, 0 RX overflows |
-| OFDM 16-QAM, raw 720p, 60 s | 61035 OFDM frames/s (2.0 GSPS), 5.29 Gb/s, 3.66 M OFDM frames, 58 / 59 s without errors, 28551 of 28660 video frames byte-exact, BER 3.1 × 10⁻⁵ (all from one RX overflow), 0 TX underflows ([log](./docs/results/ofdm_stream_16qam_720p_60s_log.txt)) |
-| OFDM 64-QAM, raw 1080p, 60 s | 7.94 Gb/s, per-second BER median 2.3 × 10⁻⁷, 18621 of 19120 video frames byte-exact, BER 2.0 × 10⁻⁴ (mostly one RX stall) ([log](./docs/results/ofdm_stream_64qam_1080p_60s_log.txt)) |
-| OFDM 256-QAM, 20 s (`--tx-threads 4`) | 10.58 Gb/s, BER 1.8 × 10⁻⁴ in every second (the SNR limit; a payload this size needs FEC), 0 TX underflows, 0 relocks ([log](./docs/results/ofdm_stream_256qam_20s_log.txt)) |
-| Modem 2, two independent ends, worst case (C model; [zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm#modem-2-two-independent-ends)) | two 300 kHz lasers, carrier offset 5 MHz, sample clocks 50 ppm apart, IQ imbalance at both ends, SNR 30 dB, 16-QAM (5.10 Gb/s), receiver in fixed point, 12 seeds × 30 frames: BER 1.21 × 10⁻⁴ (1 polarization), 1.59 × 10⁻⁴ (2 polarizations, worst seed 3.62 × 10⁻⁴) |
+| Modem 2 on the board (FPGA transmitter, host receiver on raw ADC captures; [zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm#modem-2-two-independent-ends)) | 16-QAM (5.10 Gb/s), SMA loopback, 3 captures, 44.7 M bits: EVM −26.9 dB, BER 4.2 … 4.6 × 10⁻⁵, every error on four sub-carriers where the converters put the RF pilot again at ± j fs / 8 (a known spur, −36 dBc; without those 12 sub-carriers 0 errors in 5.0 M bits) |
+| Modem 2, two independent ends, worst case (C model) | two 300 kHz lasers, carrier offset 5 MHz, sample clocks 50 ppm apart, IQ imbalance at both ends, SNR 30 dB, 16-QAM, receiver in fixed point, 12 seeds × 30 frames: BER 1.21 × 10⁻⁴ (1 polarization), 1.59 × 10⁻⁴ (2 polarizations, worst seed 3.62 × 10⁻⁴) |
 | MTS | DAC_B / ADC_D vs DAC_A / ADC_B after sync: +0.012 … +0.014 samples (6 … 7 ps) ([log](./docs/results/mts_2gsps_board_log.txt)) |
 | Timing, resources | all constraints met (WNS +0.141 ns); BRAM 64 %, UltraRAM 75 %, DSP 0.1 %, LUT 28 % ([report](./docs/results/rdma_ofdm_timing_summary.rpt), [utilisation](./docs/results/rdma_ofdm_utilization.rpt), [by instance](./docs/results/rdma_ofdm_utilization_hierarchical.rpt)) |
 
@@ -88,15 +81,15 @@ Taken from 64 frames of raw ADC samples of a running link (`rf_ofdm --dump`), pr
 
 | ![16-QAM](./docs/img/ofdm_16qam.png) |
 | :----------------------------------: |
-| **Figure3** : 16-QAM, EVM −30.6 dB |
+| **Figure2** : 16-QAM, EVM −30.6 dB |
 
 | ![64-QAM](./docs/img/ofdm_64qam.png) |
 | :----------------------------------: |
-| **Figure4** : 64-QAM, EVM −30.5 dB |
+| **Figure3** : 64-QAM, EVM −30.5 dB |
 
 | ![256-QAM](./docs/img/ofdm_256qam.png) |
 | :------------------------------------: |
-| **Figure5** : 256-QAM, EVM −30.3 dB |
+| **Figure4** : 256-QAM, EVM −30.3 dB |
 
 　
 
@@ -120,7 +113,7 @@ hw/sim/run.sh                                                        # rf_stream
 tests/stream_up.sh 1 host/rf_stream_host --seconds 10 --tx tone:100  # program, MTS, configure ERNIC, stream a tone
 tests/stream_up.sh 0 host/rf_ofdm --seconds 60 --save build/rx.yuv --save-frames 120 --save-every 225
 tests/stream_up.sh 0 host/rf_ofdm --m 6 --video 1920x1080 --seconds 60
-python3 host/make_gif.py build/rx.yuv 1280x720 docs/img/ofdm_720p.gif
+python3 host/make_gif.py build/rx.yuv 1280x720 build/rx_720p.gif
 tests/stream_up.sh 0 host/rf_ofdm --m 4 --seconds 4 --dump build/rx_m4.dump     # raw samples of 64 frames
 host/ofdm_plots build/rx_m4.dump build/plot_m4                                  # EVM, spectrum, symbols
 python3 host/plot_ofdm.py build/plot_m4 docs/img/ofdm_16qam.png
@@ -198,10 +191,9 @@ GitHub also offers the citation under **Cite this repository** (from [CITATION.c
 <span id="cn">RFSoC 4x2：主机 CPU 做调制解调的 2 GSPS OFDM（100G RDMA）</span>
 ===========================
 
-Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 流，由 QSFP28 口上的 RoCE v2（AMD ERNIC）承载：**同时 64 Gbit/s 送往 DAC、64 Gbit/s 来自 ADC，即双向 2.0 GSPS × I/Q × 16 bit。** OFDM 发射机和接收机都在主机 CPU 上用 C 实现。经过环回线缆（I：DAC_A → ADC_B，Q：DAC_B → ADC_D，多 tile 同步），链路传送未压缩的原始视频：
+Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 流，由 QSFP28 口上的 RoCE v2（AMD ERNIC）承载：**同时 64 Gbit/s 送往 DAC、64 Gbit/s 来自 ADC，即双向 2.0 GSPS × I/Q × 16 bit。** OFDM 发射机和接收机都在主机 CPU 上用 C 实现。经过环回线缆（I：DAC_A → ADC_B，Q：DAC_B → ADC_D，多 tile 同步），链路传送未压缩的原始视频。
 
-* **16-QAM**：净荷 5.29 Gb/s，720p 478 帧/s。60 s 中 58/59 秒无误码（BER < 10⁻⁸），99.6 % 的视频帧逐字节正确，总 BER 3 × 10⁻⁵。
-* **64-QAM**：净荷 7.94 Gb/s，1080p 319 帧/s。每秒 BER 中位数 2 × 10⁻⁷（线缆 SNR 所限），97.4 % 的视频帧逐字节正确。
+* **Modem 2**（[zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm#modem-2两端独立)）：FPGA 内的发射机以 16-QAM（5.10 Gb/s）调制加扰后的 720p 视频；主机采集一段原始 ADC 样本的 burst 并离线解调。一次 24.5 ms、1497 个 OFDM 帧的 burst 含 11 帧连续视频，BER 4.1 × 10⁻⁵；误码全部落在 4 个子载波上，即转换器把射频导频复制到 ± j fs / 8 的位置（本板已知杂散）。
 本仓库结合了 [rfsoc4x2_ernic](https://github.com/uceeyuf/rfsoc4x2_ernic)（100G RDMA）与 [rfsoc4x2_mts](https://github.com/uceeyuf/rfsoc4x2_mts)（多 tile 同步、I/Q OFDM），两者移植到 Vivado 2023.2，射频侧提到 2.0 GSPS。
 
 **FPGA 内的 OFDM 调制解调**（发射机和接收机与各自的 C 模型逐位一致，基于本仓库的流式核心；2 GSPS 已上板，4 GSPS 进行中）在 [zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm) 继续。
@@ -229,10 +221,8 @@ Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 
 | 测试 | 结果 |
 | :--- | :--- |
 | 流测试（单音）10 s | 双向 64.00 Gbit/s，0 RX gap，0 TX underflow，0 RX overflow |
-| OFDM 16-QAM，原始 720p，60 s | 每秒 61035 个 OFDM 帧（2.0 GSPS），5.29 Gb/s，58/59 秒无误码，28660 帧视频中 28551 帧逐字节正确，BER 3.1 × 10⁻⁵（全部来自一次 RX 溢出），0 TX underflow |
-| OFDM 64-QAM，原始 1080p，60 s | 7.94 Gb/s，每秒 BER 中位数 2.3 × 10⁻⁷，19120 帧中 18621 帧逐字节正确 |
-| OFDM 256-QAM，20 s（`--tx-threads 4`） | 10.58 Gb/s，每秒 BER 均为 1.8 × 10⁻⁴（SNR 所限，传视频需要 FEC），0 TX underflow，0 次重锁 |
-| Modem 2，两端独立，最坏情况（C 模型；[zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm#modem-2两端独立)） | 两个 300 kHz 激光器，载波频偏 5 MHz，采样时钟相差 50 ppm，两端 IQ 失衡，SNR 30 dB，16-QAM（5.10 Gb/s），接收机定点，12 个种子 × 30 帧：BER 1.21 × 10⁻⁴（1 个偏振），1.59 × 10⁻⁴（2 个偏振，最差种子 3.62 × 10⁻⁴） |
+| Modem 2 上板（FPGA 发射，主机解原始 ADC 采集；[zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm#modem-2两端独立)） | 16-QAM（5.10 Gb/s），SMA 环回，3 次采集共 44.7 M bit：EVM −26.9 dB，BER 4.2 … 4.6 × 10⁻⁵，误码全部在 4 个子载波上，即转换器把射频导频复制到 ± j fs / 8 的位置（已知杂散，−36 dBc；不计这 12 个子载波时 5.0 M bit 0 误码） |
+| Modem 2，两端独立，最坏情况（C 模型） | 两个 300 kHz 激光器，载波频偏 5 MHz，采样时钟相差 50 ppm，两端 IQ 失衡，SNR 30 dB，16-QAM，接收机定点，12 个种子 × 30 帧：BER 1.21 × 10⁻⁴（1 个偏振），1.59 × 10⁻⁴（2 个偏振，最差种子 3.62 × 10⁻⁴） |
 | MTS | 同步后 DAC_B / ADC_D 相对 DAC_A / ADC_B：+0.012 … +0.014 样本（6 … 7 ps） |
 | 时序、资源 | 全部满足（WNS +0.141 ns）；BRAM 64 %，UltraRAM 75 %，DSP 0.1 %，LUT 28 % |
 
@@ -245,7 +235,7 @@ CPU 封装达到 TjMax（105 °C）时会热降频，每次降频就是一次这
 
 ## 频谱与星座图
 
-数据取自运行中链路的 64 帧原始 ADC 样本（`rf_ofdm --dump`），由 `host/ofdm_plots` 处理、`host/plot_ofdm.py` 绘制（见上文图 4–6）。
+数据取自运行中链路的 64 帧原始 ADC 样本（`rf_ofdm --dump`），由 `host/ofdm_plots` 处理、`host/plot_ofdm.py` 绘制（见上文图 2–4）。
 * **左图**：接收 PSD（蓝）与相同数字电平下调制器输出（灰）的对比。
   * Welch 估计：2048 点 FFT，Hann 窗，每格 0.98 MHz。
   * 模拟链路损耗约 8 dB；带内（±898 MHz，890 个子载波）平坦度约 ±1 dB。
