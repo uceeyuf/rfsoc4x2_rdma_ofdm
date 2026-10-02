@@ -1,5 +1,5 @@
 # Program the RFSoC4x2 over JTAG and start the application on A53 #0.
-#   xsct run_jtag.tcl [workspace]     (sw/vitis_ws by default; sw/vitis_rdma for the RDMA OFDM design)
+#   xsct run_jtag.tcl [workspace]     (sw/vitis_ws by default; sw/vitis_rdma for the RDMA streaming design)
 # Copyright (c) 2026, Yijie Yu. BSD-3-Clause.
 
 set here [file normalize [file dirname [info script]]]

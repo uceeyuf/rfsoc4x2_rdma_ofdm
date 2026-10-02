@@ -1,8 +1,7 @@
 #!/bin/sh
-# Bring up the RDMA OFDM design and run a host program against it.
+# Bring up the RDMA streaming design and run a host program against it.
 #
 #   tests/stream_up.sh 1 host/rf_stream_host --seconds 10 --tx tone:100
-#   tests/stream_up.sh 0 host/rf_ofdm --seconds 20 --save build/rx.yuv --save-frames 60
 #
 # First argument 1: load the bitstream and the PS application over JTAG (sw/vitis_rdma: clocks and
 # RF tiles at boot), then key m (multi-tile sync) over the UART; 0: the board is already up.

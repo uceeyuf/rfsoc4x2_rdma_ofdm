@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this work, please cite it as below."
 type: software
-title: "RFSoC 4x2: 2 GSPS OFDM with the host CPU as the modem, over 100G RDMA"
+title: "RFSoC 4x2: 2 GSPS I/Q streaming over 100G RDMA, Modem 2 on the board"
 authors:
   - family-names: "Yu"
     given-names: "Yijie"
@@ -42,11 +42,3 @@ references:
       - family-names: "Forencich"
         given-names: "Alex"
     url: "https://github.com/alexforencich/verilog-ethernet"
-  - type: software
-    title: "FFTW"
-    authors:
-      - family-names: "Frigo"
-        given-names: "Matteo"
-      - family-names: "Johnson"
-        given-names: "Steven G."
-    url: "https://www.fftw.org"
