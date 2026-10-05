@@ -9,7 +9,7 @@
 
 Continuous I/Q streaming between a Linux host and the RF data converters of the RFSoC 4x2 (XCZU48DR), carried by RoCE v2 (AMD ERNIC) on the QSFP28 port: **64 Gbit/s to the DACs and 64 Gbit/s from the ADCs at the same time, i.e. 2.0 GSPS × I/Q × 16 bit each way**, multi-tile synchronised. It combines [rfsoc4x2_ernic](https://github.com/uceeyuf/rfsoc4x2_ernic) (100G RDMA) with [rfsoc4x2_mts](https://github.com/uceeyuf/rfsoc4x2_mts) (multi-tile sync), both ported to Vivado 2023.2 and the RF side to 2.0 GSPS.
 
-On this streaming core runs **Modem 2** ([zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm)), an OFDM modem for two independent ends (independent lasers or oscillators, independent sample clocks): the transmitter in the FPGA, the receiver on the host from raw ADC captures (its RTL in progress). Through a loopback cable (DAC_A → ADC_B for I, DAC_B → ADC_D for Q) it carries scrambled 720p video at 16-QAM (5.10 Gb/s): one 24.5 ms burst of 1497 OFDM frames holds 11 consecutive video frames; over three bursts, 375 M bits without an error, all 32 video frames byte-exact. The modem's source (RTL, models) is not published.
+On this streaming core runs **Modem 2** ([zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm)), an OFDM modem for two independent ends (independent lasers or oscillators, independent sample clocks): the transmitter and, since October 2026, the receiver in the FPGA: in real time at 2 GSPS (61035 frames/s; 16-QAM, 5.10 Gb/s: 1.40 M frames, BER 5.0 × 10⁻¹⁰), at 4 GSPS in bursts. Through a loopback cable (DAC_A → ADC_B for I, DAC_B → ADC_D for Q) it carries scrambled 720p video at 16-QAM (5.10 Gb/s): one 24.5 ms burst of 1497 OFDM frames holds 11 consecutive video frames; over three bursts, 375 M bits without an error, all 32 video frames byte-exact. The modem's source (RTL, models) is not published.
 
 　
 
@@ -32,7 +32,7 @@ host: samples             <--RDMA WRITE WITH IMMEDIATE-- rf_stream RX ring (512 
   * **Keeping time**: the TX read pointer never waits. A word the host has not written in time plays as zeros, so later samples stay on the time grid, and the host skips ahead. An RX overflow drops whole 512-bit words, which the FPGA counts.
   * **Restarting**: ERNIC keeps its SQ consumer index when a QP is configured again, so the SQ producer index runs on from run to run. The host stops cleanly, waiting until every RX chunk is completed.
 * **Clocks**: ERNIC runs at 200 MHz and the RF fabric at 250 MHz (2.0 GSPS, 8 samples per cycle). The MTS block design (LMK04828 / LMX2594 from the A53, tile 2 PLL, SYSREF 5 MHz) comes from rfsoc4x2_mts.
-* **Modem 2** sits on the same core: its transmitter between the TX ring and the DACs, payloads in 32 KB slots; the receiver works on raw ADC captures (two or four ADCs) taken through the RX ring. The ADCs' background calibration converges on a tone asynchronous to their interleaving (frames muted) and is frozen before the frames start. Design and measurements: [zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm).
+* **Modem 2** sits on the same core: its transmitter between the TX ring and the DACs, payloads in 32 KB slots; its receiver between the ADCs and the RX ring, which then carries payload slots instead of samples (or raw ADC captures, two or four ADCs, for the acquisition). The ADCs' background calibration converges on a tone asynchronous to their interleaving (frames muted) and is frozen before the frames start. Design and measurements: [zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm).
 
 　
 
@@ -44,6 +44,7 @@ Host: Core Ultra 7 265K (8 P + 12 E cores), Mellanox ConnectX-4 (PCIe 3.0 x16), 
 | :--- | :----- |
 | Streaming (`rf_stream_host`, tone), 10 s | 64.00 Gbit/s to the DACs and 64.00 Gbit/s from the ADCs, 0 RX gaps, 0 TX underflows, 0 RX overflows |
 | Modem 2 on the board (FPGA transmitter, receiver on raw ADC captures) | SMA loopback, the ADCs' background calibration converged on a tone asynchronous to their interleaving, then frozen. 2 GSPS: EVM −37.2 dB at 16 / 64 / 256-QAM; 16-QAM (5.10 Gb/s) 0 errors in 415 M bits (BER < 7.2 × 10⁻⁹), 64-QAM 0 / 7.7 M, 256-QAM (10.2 Gb/s) 0 / 10.2 M. 4 GSPS: 16-QAM −34.2 dB, 0 errors; 256-QAM (20.4 Gb/s) −34.4 dB, BER 4.6 × 10⁻⁵ |
+| Modem 2 on the board, FPGA transmitter → cable → FPGA receiver, real time | 2 GSPS, 16-QAM (5.10 Gb/s), 30 s: 1.40 M frames, 59 bit errors in 117 G bits (BER 5.0 × 10⁻¹⁰); 64-QAM 2.7 × 10⁻⁷, 256-QAM 1.6 × 10⁻⁶. 4 GSPS receiver in bursts (an on-chip buffer of both branches, read at half speed): 16-QAM, 200 bursts, no error in 66.9 M bits |
 | Modem 2, two independent ends, worst case (C model) | two 300 kHz lasers, carrier offset 5 MHz, sample clocks 50 ppm apart, IQ imbalance at both ends, SNR 30 dB, 16-QAM, receiver in fixed point, 12 seeds × 30 frames: BER 2.6 × 10⁻⁵ (1 polarization), 3.1 × 10⁻⁵ (2 polarizations, worst seed 5.3 × 10⁻⁵) |
 | MTS | DAC_B / ADC_D vs DAC_A / ADC_B after sync: +0.012 … +0.014 samples (6 … 7 ps) ([log](./docs/results/mts_2gsps_board_log.txt)) |
 | Timing, resources (streaming core) | all constraints met (WNS +0.141 ns); BRAM 64 %, UltraRAM 75 %, DSP 0.1 %, LUT 28 % ([report](./docs/results/rdma_ofdm_timing_summary.rpt), [utilisation](./docs/results/rdma_ofdm_utilization.rpt), [by instance](./docs/results/rdma_ofdm_utilization_hierarchical.rpt)) |
@@ -168,7 +169,7 @@ GitHub also offers the citation under **Cite this repository** (from [CITATION.c
 
 Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 流，由 QSFP28 口上的 RoCE v2（AMD ERNIC）承载：**同时 64 Gbit/s 送往 DAC、64 Gbit/s 来自 ADC，即双向 2.0 GSPS × I/Q × 16 bit**，多 tile 同步。本仓库结合了 [rfsoc4x2_ernic](https://github.com/uceeyuf/rfsoc4x2_ernic)（100G RDMA）与 [rfsoc4x2_mts](https://github.com/uceeyuf/rfsoc4x2_mts)（多 tile 同步），两者移植到 Vivado 2023.2，射频侧提到 2.0 GSPS。
 
-在这个流式核心上运行 **Modem 2**（[zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm)）：面向两端独立（激光器或本振独立、采样时钟独立）的 OFDM 调制解调，发射机在 FPGA 内，接收机在主机上解原始 ADC 采集（其 RTL 进行中）。经过环回线缆（I：DAC_A → ADC_B，Q：DAC_B → ADC_D），以 16-QAM（5.10 Gb/s）传送加扰后的 720p 视频：一次 24.5 ms、1497 个 OFDM 帧的 burst 含 11 帧连续视频；三次 burst 共 375 M bit 零误码，32 帧视频全部逐字节正确。调制解调的源码（RTL、模型）不公开。
+在这个流式核心上运行 **Modem 2**（[zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm)）：面向两端独立（激光器或本振独立、采样时钟独立）的 OFDM 调制解调，发射机与（2026 年 10 月起）接收机都在 FPGA 内：2 GSPS 实时（每秒 61035 帧；16-QAM，5.10 Gb/s：140 万帧，BER 5.0 × 10⁻¹⁰），4 GSPS 为突发接收。经过环回线缆（I：DAC_A → ADC_B，Q：DAC_B → ADC_D），以 16-QAM（5.10 Gb/s）传送加扰后的 720p 视频：一次 24.5 ms、1497 个 OFDM 帧的 burst 含 11 帧连续视频；三次 burst 共 375 M bit 零误码，32 帧视频全部逐字节正确。调制解调的源码（RTL、模型）不公开。
 
 见上文图 1。
 
@@ -180,7 +181,7 @@ Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 
   * **按时间走**：TX 读指针从不等待，主机没来得及写的字播放为零，后续样本保持在时间网格上，主机跳帧追上；RX 溢出按整个 512 bit 字丢弃，FPGA 记录丢弃数。
   * **重跑**：ERNIC 重新配置 QP 时保留 SQ 消费指针，因此 SQ 生产指针跨运行累加；主机退出前等所有 RX 块完成。
 * **时钟**：ERNIC 200 MHz，射频侧 250 MHz（2.0 GSPS，每周期 8 个样本）。MTS block design（A53 配置 LMK04828 / LMX2594，tile 2 PLL，SYSREF 5 MHz）来自 rfsoc4x2_mts。
-* **Modem 2** 接在同一个核心上：发射机位于 TX 环与 DAC 之间，净荷按 32 KB 槽放；接收机处理经 RX 环采到的原始 ADC 样本（两路或四路 ADC）。ADC 后台校准先在与其交织不同步的单音上收敛（帧静音），冻结后再发帧。设计与测量见 [zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm)。
+* **Modem 2** 接在同一个核心上：发射机位于 TX 环与 DAC 之间，净荷按 32 KB 槽放；接收机位于 ADC 与 RX 环之间，RX 环随后传净荷槽而不是样本（捕获阶段则传两路或四路 ADC 的原始采集）。ADC 后台校准先在与其交织不同步的单音上收敛（帧静音），冻结后再发帧。设计与测量见 [zcu208_4gsps_ofdm](https://github.com/uceeyuf/zcu208_4gsps_ofdm)。
 
 ## 结果
 
@@ -188,6 +189,7 @@ Linux 主机与 RFSoC 4x2（XCZU48DR）射频数据转换器之间的连续 I/Q 
 | :--- | :--- |
 | 流测试（单音）10 s | 双向 64.00 Gbit/s，0 RX gap，0 TX underflow，0 RX overflow |
 | Modem 2 上板（FPGA 发射，接收机解原始 ADC 采集） | SMA 环回，ADC 后台校准先在与其交织不同步的单音上收敛，然后冻结。2 GSPS：16 / 64 / 256-QAM 的 EVM 都是 −37.2 dB；16-QAM（5.10 Gb/s）415 M bit 零误码（BER < 7.2 × 10⁻⁹），64-QAM 0 / 7.7 M，256-QAM（10.2 Gb/s）0 / 10.2 M。4 GSPS：16-QAM −34.2 dB，零误码；256-QAM（20.4 Gb/s）−34.4 dB，BER 4.6 × 10⁻⁵ |
+| Modem 2 上板，FPGA 发射 → 线缆 → FPGA 接收，实时 | 2 GSPS，16-QAM（5.10 Gb/s），30 s：140 万帧，1170 亿 bit 中 59 个误码（BER 5.0 × 10⁻¹⁰）；64-QAM 2.7 × 10⁻⁷，256-QAM 1.6 × 10⁻⁶。4 GSPS 突发接收（两条支路存进片上缓冲，半速读出）：16-QAM，200 次突发，66.9 M bit 零误码 |
 | Modem 2，两端独立，最坏情况（C 模型） | 两个 300 kHz 激光器，载波频偏 5 MHz，采样时钟相差 50 ppm，两端 IQ 失衡，SNR 30 dB，16-QAM，接收机定点，12 个种子 × 30 帧：BER 2.6 × 10⁻⁵（1 个偏振），3.1 × 10⁻⁵（2 个偏振，最差种子 5.3 × 10⁻⁵） |
 | MTS | 同步后 DAC_B / ADC_D 相对 DAC_A / ADC_B：+0.012 … +0.014 样本（6 … 7 ps） |
 | 时序、资源（流式核心） | 全部满足（WNS +0.141 ns）；BRAM 64 %，UltraRAM 75 %，DSP 0.1 %，LUT 28 % |
